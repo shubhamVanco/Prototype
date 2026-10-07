@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0e0f11;
+  --color-surface: #151618;
+  --color-surface-2: #1d1f22;
+  --color-line: rgba(255, 255, 255, 0.11);
+  --color-ink: #f2f0ea;
+  --color-muted: #a2a09a;
+  --color-brand: #f2f0ea;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --font-sans: "Barlow", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-display: "Barlow Semi Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Rubber and chalk: neutral surfaces, colour reserved for status. The dark scope is also used to
+   keep the camera overlay dark inside the light theme. */
+html[data-theme="light"] {
+  --color-bg: #f2f0eb;
+  --color-surface: #fbfaf7;
+  --color-surface-2: #e7e4dc;
+  --color-line: rgba(23, 24, 27, 0.15);
+  --color-ink: #17181b;
+  --color-muted: #5b5a55;
+  --color-brand: #17181b;
+  --color-ok: #1f7a4d;
+  --color-warn: #9a5700;
+  --color-bad: #c4372c;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --color-bg: #0e0f11;
+  --color-surface: #151618;
+  --color-surface-2: #1d1f22;
+  --color-line: rgba(255, 255, 255, 0.11);
+  --color-ink: #f2f0ea;
+  --color-muted: #a2a09a;
+  --color-brand: #f2f0ea;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-wrap: pretty;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+/* Browser surfaces: selection, caret, form accents and focus belong to the palette too. */
+::selection { background: color-mix(in srgb, var(--color-ink) 22%, transparent); }
+input, select, textarea { caret-color: var(--color-ink); accent-color: var(--color-ink); }
+input::placeholder { color: color-mix(in srgb, var(--color-muted) 80%, transparent); }
+:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 2px; border-radius: 6px; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
+
+input, select, button, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* The one scan line: used on the scanning screen and the launch animation. */
+@keyframes scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.scan-line {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: var(--color-ink);
+  animation: scan 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-line { animation: none; top: 50%; }
+}
+
+@media print {
+  body { background: #fff; }
+}

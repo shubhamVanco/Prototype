@@ -1,0 +1,27 @@
+# Keep secrets and build junk out of the image and the build context.
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+out
+build
+coverage
+*.log
+*.tsbuildinfo
+next-env.d.ts
+
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+.playwright-mcp
+.claude
+
+Dockerfile
+.dockerignore
+docker-compose*.yml
+README.md

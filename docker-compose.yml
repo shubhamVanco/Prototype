@@ -1,0 +1,11 @@
+services:
+  tyrevision:
+    image: tyrevision-ai:latest
+    build: .
+    ports:
+      - "3000:3000"
+    # Runtime secrets (OPENAI_API_KEY, OPENAI_VISION_MODEL, ...) are read from .env at run time.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
