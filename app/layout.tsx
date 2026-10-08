@@ -1,8 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import "@fontsource/barlow/400.css";
-import "@fontsource/barlow/500.css";
-import "@fontsource/barlow/600.css";
-import "@fontsource/barlow/700.css";
 import "@fontsource/barlow-semi-condensed/600.css";
 import "@fontsource/barlow-semi-condensed/700.css";
 import "./globals.css";
@@ -16,7 +12,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0e0f11",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f2f0eb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e0f11" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

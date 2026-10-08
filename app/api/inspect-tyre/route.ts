@@ -2,10 +2,10 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { debugLog, imageDimensions } from "@/lib/ai/imageInfo";
 import { getRetreadCriteria } from "@/lib/ai/retreadCriteria";
-import {
-  FINAL_CLAUSE, INTERNAL_DEFECT_NOTICE, TYRE_INSPECTION_PROMPT,
-} from "@/lib/ai/tyreInspectionPrompt";
+import { brief, briefList } from "@/lib/ai/brief";
+import { INTERNAL_DEFECT_NOTICE, TYRE_INSPECTION_PROMPT } from "@/lib/ai/tyreInspectionPrompt";
 import { TYRE_INSPECTION_SCHEMA } from "@/lib/ai/tyreInspectionSchema";
+import { NOT_A_TYRE_CODE, TYRE_GATE_PROMPT, TYRE_GATE_SCHEMA, gateFailures } from "@/lib/ai/tyreGate";
 import { validateModelOutput } from "@/lib/ai/validateOutput";
 import type { InspectTyreResponse, RetreadDecision, TyreInspectionResult } from "@/types/tyreInspection";
 
@@ -19,6 +19,11 @@ const MIN_REJECT_CONFIDENCE = 0.7;
 
 const fail = (status: number, error: string) =>
   NextResponse.json<InspectTyreResponse>({ success: false, error }, { status });
+
+type NotTyre = { view: string; subject: string; confidence: number };
+/** Hard rule: a photo without a tyre is REJECTED (never sent to manual review), with a short reason. */
+const notATyre = (error: string, notTyre: NotTyre[] = []) =>
+  NextResponse.json<InspectTyreResponse>({ success: false, code: NOT_A_TYRE_CODE, error, notTyre }, { status: 422 });
 
 /** Detect the real image type from magic bytes (don't trust the client's MIME type). */
 function sniff(b: Uint8Array): "image/jpeg" | "image/png" | "image/webp" | null {
@@ -45,11 +50,11 @@ function unvalidated(): TyreInspectionResult {
   return {
     decision: "MANUAL_REVIEW",
     tyre_detected: true,
-    image_quality: { usable: false, score: 0, issues: ["AI output could not be validated reliably."] },
+    image_quality: { usable: false, score: 0, issues: ["AI output could not be validated."] },
     retread_rejection_reasons: [],
     observations_not_automatic_rejection: [],
-    areas_not_assessed: ["Internal casing condition cannot be assessed from RGB image"],
-    decision_reason: `AI output could not be validated reliably. Manual inspection required. ${FINAL_CLAUSE}`,
+    areas_not_assessed: ["Internal casing condition"],
+    decision_reason: "AI output could not be validated. Manual inspection required.",
     required_follow_up: ["Manual physical inspection"],
     limitations: [INTERNAL_DEFECT_NOTICE],
   };
@@ -65,10 +70,9 @@ function normalize(r: TyreInspectionResult): TyreInspectionResult {
     (d) => d.visual_evidence.trim() && !claimsInternalDamage(`${d.visual_evidence} ${d.why_it_meets_rejection_criterion}`),
   );
 
-  const areas = [...r.areas_not_assessed];
-  if (!areas.some((a) => /internal/i.test(a))) areas.push("Internal casing condition cannot be assessed from RGB image");
-  const limitations = [...r.limitations];
-  if (!limitations.some((l) => /internal/i.test(l))) limitations.push(INTERNAL_DEFECT_NOTICE);
+  const areas = briefList(r.areas_not_assessed, 4);
+  if (!areas.some((a) => /internal/i.test(a))) areas.push("Internal casing condition");
+  const limitations = briefList(r.limitations, 2);
 
   const goodImage = r.tyre_detected && r.image_quality.usable;
   const solid = reasons.some((d) => d.confidence >= MIN_REJECT_CONFIDENCE);
@@ -82,29 +86,35 @@ function normalize(r: TyreInspectionResult): TyreInspectionResult {
 
   const safeReason =
     decision === "NO_VISIBLE_RETREAD_REJECTION"
-      ? "No configured retreading rejection condition was visibly identified from the supplied image."
+      ? "No rejection condition visible in the photos."
       : decision === "RETREAD_REJECT"
-        ? "A configured retread rejection condition is clearly visible in the supplied image."
-        : "Possible rejection condition or insufficient evidence; manual inspection required.";
+        ? "A retread rejection condition is clearly visible."
+        : "Evidence is unclear. A person must inspect this tyre.";
   // If the server changed the model's decision, the model's own explanation no longer fits.
-  let reason = decision !== r.decision
-    ? `${safeReason} The evidence did not meet the image-quality, confidence or follow-up requirements for the model's original decision.`
-    : sanitize(r.decision_reason, safeReason).trim() || safeReason;
-  if (decision === "RETREAD_REJECT" && !/pre-screening/i.test(reason)) {
-    reason = `Rejected during AI pre-screening against configured retread rejection criteria. ${reason}`;
-  }
-  if (!reason.includes("approved physical inspection process")) reason = `${reason} ${FINAL_CLAUSE}`;
+  const reason = decision !== r.decision ? safeReason : brief(sanitize(r.decision_reason, safeReason)) || safeReason;
 
+  // Every text the user sees is kept to 2-3 lines.
   return {
     ...r,
     decision,
-    image_quality: { ...r.image_quality, issues: r.image_quality.issues.map((i) => sanitize(i, "Image issue noted.")) },
-    retread_rejection_reasons: reasons,
-    observations_not_automatic_rejection: r.observations_not_automatic_rejection.map((o) => ({
-      ...o, visual_evidence: sanitize(o.visual_evidence, "Visible feature described by the model; confirm by physical inspection."),
+    image_quality: { ...r.image_quality, issues: briefList(r.image_quality.issues.map((i) => sanitize(i, "Image issue noted."))) },
+    retread_rejection_reasons: reasons.slice(0, 3).map((d) => ({
+      ...d,
+      criterion_name: brief(d.criterion_name, 60),
+      location: brief(d.location, 60),
+      visual_evidence: brief(d.visual_evidence),
+      why_it_meets_rejection_criterion: brief(d.why_it_meets_rejection_criterion),
+    })),
+    observations_not_automatic_rejection: r.observations_not_automatic_rejection.slice(0, 3).map((o) => ({
+      ...o,
+      name: brief(o.name, 60),
+      location: brief(o.location, 60),
+      visual_evidence: brief(sanitize(o.visual_evidence, "Visible feature; confirm by physical inspection.")),
+      reason_not_rejection: brief(o.reason_not_rejection),
     })),
     areas_not_assessed: areas,
     decision_reason: reason,
+    required_follow_up: briefList(r.required_follow_up, 2),
     limitations,
   };
 }
@@ -155,11 +165,46 @@ export async function POST(req: Request) {
   const criteria = getRetreadCriteria();
   const intro =
     imageParts.length > 1
-      ? `The application confirms that all ${imageParts.length} images below show the SAME tyre. Views, in order: ${views.map((v, i) => `${i + 1}) ${v}`).join(", ")}.`
-      : "One image of a tyre is provided.";
+      ? `${imageParts.length} images are supplied as views of the same tyre. Views, in order: ${views.map((v, i) => `${i + 1}) ${v}`).join(", ")}.`
+      : "One image is supplied.";
   const model = process.env.OPENAI_VISION_MODEL || "gpt-4.1";
   const client = new OpenAI({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
   const t0 = Date.now();
+
+  // HARD RULE: only tyres are inspected. Every photo must pass the tyre gate before any result exists.
+  try {
+    const gate = await client.responses.create({
+      model,
+      instructions: TYRE_GATE_PROMPT,
+      input: [{
+        role: "user",
+        content: [
+          { type: "input_text", text: `${imageParts.length} image(s) follow, in order.` },
+          ...imageParts.map((p) => ({ ...p, detail: "low" as const })),
+        ],
+      }],
+      text: { format: { type: "json_schema", name: "tyre_gate", strict: true, schema: TYRE_GATE_SCHEMA as unknown as Record<string, unknown> } },
+      store: false,
+    });
+    let verdict: unknown = null;
+    try { verdict = JSON.parse(gate.output_text); } catch { /* malformed => every photo fails below */ }
+    const failed = gateFailures(verdict, imageParts.length);
+    console.info("[inspect-tyre] tyre gate", { model, images: imageParts.length, failed: failed.length, ms: Date.now() - t0 });
+    if (failed.length) {
+      const notTyre = failed.map((f) => ({ view: views[f.index - 1] || `Photo ${f.index}`, subject: f.subject, confidence: f.confidence }));
+      const which = imageParts.length === 1
+        ? `No tyre found. The photo shows ${notTyre[0].subject}.`
+        : `No tyre found in ${notTyre.map((n) => `${n.view} (${n.subject})`).join(", ")}.`;
+      return notATyre(brief(which, 160), notTyre);
+    }
+  } catch (e) {
+    const status = e instanceof OpenAI.APIError ? e.status : undefined;
+    const timedOut = e instanceof OpenAI.APIConnectionTimeoutError;
+    console.error("[inspect-tyre] tyre gate failure", { model, ms: Date.now() - t0, status, timedOut });
+    if (timedOut) return fail(504, "The AI took too long to respond. Please try again.");
+    if (status === 429) return fail(503, "The AI service is busy. Please try again shortly.");
+    return fail(502, "The AI inspection service is unavailable. Please try again.");
+  }
   debugLog([`Vision model: ${model}`, `Criteria: ${criteria.map((c) => c.code).join(", ")}`, "Vision inference: STARTED"]);
 
   try {
@@ -199,7 +244,7 @@ export async function POST(req: Request) {
       console.warn("[inspect-tyre] model output failed validation", { model, ms: Date.now() - t0, reason: checked.reason });
       return NextResponse.json<InspectTyreResponse>({
         success: true, inspection: unvalidated(), model, validated: false,
-        disclaimer: `${INTERNAL_DEFECT_NOTICE} ${FINAL_CLAUSE}`,
+        disclaimer: INTERNAL_DEFECT_NOTICE,
       });
     }
 
@@ -215,11 +260,11 @@ export async function POST(req: Request) {
     });
 
     if (!inspection.tyre_detected) {
-      return fail(422, "No tyre was detected in the photo. Please retake it with the tyre clearly in frame.");
+      return notATyre("No tyre found in the photo.");
     }
     return NextResponse.json<InspectTyreResponse>({
       success: true, inspection, model, validated: true,
-      disclaimer: `${INTERNAL_DEFECT_NOTICE} This is AI pre-screening against configured retread rejection criteria, not a certified retreadability decision. ${FINAL_CLAUSE}`,
+      disclaimer: INTERNAL_DEFECT_NOTICE,
     });
   } catch (e) {
     const status = e instanceof OpenAI.APIError ? e.status : undefined;

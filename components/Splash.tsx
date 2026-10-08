@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 
-/** Launch animation: a tyre rolls in, one scan line passes over it, the name appears, a loader fills. */
+/** Launch animation: a tyre rolls in, the name appears, a loader fills. */
 export function Splash({ duration = 2000 }: { duration?: number }) {
   return (
     <motion.div
@@ -26,12 +26,6 @@ export function Splash({ duration = 2000 }: { duration?: number }) {
           <circle cx="100" cy="100" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
           <circle cx="100" cy="100" r="9" fill="currentColor" />
         </svg>
-        <motion.div
-          className="absolute inset-x-[-4%] h-0.5 bg-ink"
-          initial={{ top: "0%", opacity: 0 }}
-          animate={{ top: ["0%", "100%", "0%"], opacity: [0, 1, 1, 0] }}
-          transition={{ delay: 0.9, duration: 1.4, ease: [0.45, 0, 0.55, 1] }}
-        />
       </motion.div>
 
       <motion.h1

@@ -10,14 +10,15 @@ const TONE = { ok: "text-ok", warn: "text-warn", bad: "text-bad", info: "text-br
 export function ToastHost() {
   const { toast } = useApp();
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-24 z-50 flex justify-center px-4" aria-live="polite">
+    // Top of the screen, so it never covers the pinned action buttons or the bottom nav.
+    <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+12px)] z-50 flex justify-center px-4 md:top-14" aria-live="polite">
       <AnimatePresence>
         {toast && (
           <motion.div
             key={toast.id}
-            initial={{ y: 16, opacity: 0 }}
+            initial={{ y: -16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 12, opacity: 0 }}
+            exit={{ y: -12, opacity: 0 }}
             transition={{ duration: 0.18 }}
             className="flex items-center gap-2 rounded-full border border-line bg-surface-2 px-4 py-2.5 text-sm shadow-xl"
           >

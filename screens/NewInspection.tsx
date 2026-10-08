@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { QrCode } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { ProgressSteps } from "@/components/ProgressSteps";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -20,7 +19,7 @@ export function NewInspectionScreen() {
 
   const next = () => {
     const e: Record<string, string> = {};
-    if (!t.tyreId.trim()) e.tyreId = "Enter or scan a tyre ID";
+    if (!t.tyreId.trim()) e.tyreId = "Enter a tyre ID";
     if (!t.brand) e.brand = "Select a brand";
     setErrors(e);
     if (Object.keys(e).length) return notify("Please complete the highlighted fields", "warn");
@@ -36,22 +35,12 @@ export function NewInspectionScreen() {
 
         <div className="space-y-4">
           <Field label="Tyre ID" error={errors.tyreId}>
-            <div className="flex gap-2">
-              <Input
-                value={t.tyreId}
-                invalid={!!errors.tyreId}
-                onChange={(e) => set({ tyreId: e.target.value.toUpperCase() })}
-                placeholder="TV-1025"
-              />
-              <button
-                type="button"
-                onClick={() => { set({ tyreId: `TV-${1100 + Math.floor(Math.random() * 800)}` }); notify("QR scanned (demo)", "ok"); }}
-                aria-label="Scan QR code"
-                className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2"
-              >
-                <QrCode size={20} />
-              </button>
-            </div>
+            <Input
+              value={t.tyreId}
+              invalid={!!errors.tyreId}
+              onChange={(e) => set({ tyreId: e.target.value.toUpperCase() })}
+              placeholder="TV-1025"
+            />
           </Field>
 
           <Field label="Brand" error={errors.brand}>

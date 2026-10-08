@@ -45,4 +45,4 @@ export interface TyreInspectionResult {
 
 export type InspectTyreResponse =
   | { success: true; inspection: TyreInspectionResult; disclaimer: string; model: string; validated: boolean }
-  | { success: false; error: string };
+  | { success: false; error: string; code?: "NOT_A_TYRE"; notTyre?: { view: string; subject: string; confidence: number }[] };

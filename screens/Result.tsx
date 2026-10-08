@@ -1,28 +1,27 @@
 "use client";
 
-import { ArrowRight, Bookmark, Check, RefreshCw, ScanLine } from "lucide-react";
+import { Bookmark, Check, FileText, RefreshCw, ScanLine } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { Decision } from "@/components/Decision";
-import { Disclaimer, ModeBadge, modeOf } from "@/components/DemoBadge";
+import { Disclaimer } from "@/components/ModeBadge";
 import { Findings } from "@/components/Findings";
 import { MorePhotos, needsMorePhotos } from "@/components/MorePhotos";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { StickyActions } from "@/components/StickyActions";
 import { Button } from "@/components/ui/button";
 import { DISCLAIMER } from "@/lib/decision";
 
 export function ResultScreen() {
-  const { current, isSaved, saveCurrent, openDefect, go, startNew } = useApp();
+  const { current, isSaved, saveCurrent, go, startNew } = useApp();
   if (!current) return <Fallback />;
   const { result } = current;
-  const unavailable = modeOf(result) === "UNAVAILABLE";
+  const unavailable = result.mode === "UNAVAILABLE";
   const saved = isSaved(current.id);
 
   return (
-    <div className="pb-8">
+    <div>
       <ScreenHeader title="Inspection result" subtitle={`${current.id} · ${current.tyre.brand} · ${current.tyre.type}`} />
-      <div className="space-y-6 px-5">
-        <ModeBadge mode={modeOf(result)} />
-
+      <div className="space-y-5 px-5">
         <Decision result={result} />
 
         {!saved && needsMorePhotos(result) && <MorePhotos result={result} />}
@@ -33,27 +32,24 @@ export function ResultScreen() {
           </Button>
         )}
 
-        <Findings result={result} onOpen={openDefect} />
-
-        <section>
-          <h3 className="text-base font-semibold">Recommendation</h3>
-          <p className="mt-1 text-base leading-snug">{result.recommendation}</p>
-          {result.reason && <p className="mt-2 text-sm leading-relaxed text-muted">{result.reason}</p>}
-        </section>
+        <Findings result={result} />
 
         <Disclaimer text={DISCLAIMER} />
 
-        <div className="space-y-2.5">
-          <Button onClick={() => saveCurrent()} disabled={saved}>
-            {saved ? <><Check size={16} /> Saved</> : <><Bookmark size={16} /> Save inspection</>}
-          </Button>
-          <Button variant="secondary" onClick={() => go("detail")}>
-            View full report <ArrowRight size={16} />
-          </Button>
-          <Button variant="ghost" onClick={() => { startNew(); go("dashboard"); go("new"); }}>
-            <ScanLine size={16} /> Inspect another tyre
-          </Button>
-        </div>
+        <Button variant="ghost" onClick={() => { startNew(); go("dashboard"); go("new"); }}>
+          <ScanLine size={16} /> Inspect another tyre
+        </Button>
+
+        <StickyActions>
+          <div className="grid grid-cols-2 gap-2.5">
+            <Button onClick={() => saveCurrent()} disabled={saved}>
+              {saved ? <><Check size={16} /> Saved</> : <><Bookmark size={16} /> Save</>}
+            </Button>
+            <Button variant="secondary" onClick={() => go("detail")}>
+              <FileText size={16} /> Full report
+            </Button>
+          </div>
+        </StickyActions>
       </div>
     </div>
   );

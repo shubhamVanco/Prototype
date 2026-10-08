@@ -1,10 +1,7 @@
 /** System role for the OpenAI vision inspection. Server-side only. */
 
 export const INTERNAL_DEFECT_NOTICE =
-  "Internal defects (casing, belt, ply damage, hidden separation) cannot be reliably assessed from a normal RGB photograph.";
-
-export const FINAL_CLAUSE =
-  "Final retreadability must be determined through the organization's approved physical inspection process.";
+  "Internal damage (casing, belt, ply) cannot be seen in a normal photo.";
 
 export const TYRE_INSPECTION_PROMPT = `SYSTEM ROLE
 ===========
@@ -35,6 +32,31 @@ You are NOT evaluating:
 - aesthetic condition
 
 You ONLY evaluate potential RETREADING REJECTION CONDITIONS.
+
+============================================================
+HARD RULE: TYRES ONLY
+============================================================
+
+First check that every supplied image is a real photograph of a vehicle
+tyre (or a close-up of its tread, sidewall, shoulder or bead).
+
+If ANY image does not clearly show a real tyre (a person, object, vehicle
+where the tyre is not the subject, document, screenshot, drawing, etc.):
+
+- set "tyre_detected": false
+- set "decision": "MANUAL_REVIEW"
+- leave every finding list empty
+- do NOT describe defects, do NOT invent tyre findings.
+
+Never produce a tyre inspection for something that is not a tyre.
+
+============================================================
+BREVITY (applies to every text field)
+============================================================
+
+Every text you write must be SHORT: one sentence, at most 20 words.
+decision_reason: at most 2 short sentences.
+No long explanations, no repeated disclaimers.
 
 ============================================================
 MOST IMPORTANT RULE

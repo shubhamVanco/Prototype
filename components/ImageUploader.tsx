@@ -3,17 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, Check, Circle, ImagePlus, Loader2, Trash2 } from "lucide-react";
-import { ANGLES } from "@/lib/demoImages";
+import { ANGLES } from "@/lib/angles";
 import { fileToDataUrl } from "@/lib/image";
 import { cn } from "@/lib/cn";
 import type { ImageAngle, TyreImages } from "@/types";
 import { CameraCapture } from "./CameraCapture";
 import { useApp } from "./app-context";
 
-/** Five angle slots with camera / gallery capture. */
+/**
+ * Five angle slots with camera / gallery capture.
+ * `compact` drops the large preview box (used inside the result page to save a screen of scrolling).
+ */
 export function ImageUploader({
-  images, onChange,
-}: { images: TyreImages; onChange: (i: TyreImages) => void }) {
+  images, onChange, compact = false,
+}: { images: TyreImages; onChange: (i: TyreImages) => void; compact?: boolean }) {
   const { notify } = useApp();
   const galleryRef = useRef<HTMLInputElement>(null);
   const nativeCamRef = useRef<HTMLInputElement>(null);
@@ -119,11 +122,11 @@ export function ImageUploader({
         })}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-line bg-surface p-4">
+      <div className={cn("rounded-2xl border border-line bg-surface", compact ? "mt-2.5 p-3" : "mt-4 p-4")}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-base font-semibold">{activeInfo.label} <span className="tabular font-normal text-muted">· {ANGLES.findIndex((a) => a.key === active) + 1} of 5</span></div>
-            <div className="text-sm text-muted">{activeInfo.hint}</div>
+            {!compact && <div className="text-sm text-muted">{activeInfo.hint}</div>}
           </div>
           {images[active] && (
             <button
@@ -136,7 +139,7 @@ export function ImageUploader({
           )}
         </div>
 
-        <div className="relative mt-3 aspect-[4/3] overflow-hidden rounded-xl border border-dashed border-ink/20 bg-bg">
+        <div className={cn("relative mt-3 aspect-[4/3] overflow-hidden rounded-xl border border-dashed border-ink/20 bg-bg", compact && !up && "hidden")}>
           {images[active] && up?.angle !== active ? (
             // eslint-disable-next-line @next/next/no-img-element
             <motion.img key={images[active]!.slice(-24)} initial={{ opacity: 0, scale: 1.05 }} animate={{ opacity: 1, scale: 1 }}
@@ -144,7 +147,7 @@ export function ImageUploader({
           ) : up?.angle === active ? null : (
             <div className="flex size-full flex-col items-center justify-center gap-2 text-muted">
               <Camera size={28} aria-hidden="true" />
-              <span className="text-xs">No photo yet</span>
+              <span className="text-sm">No photo yet</span>
             </div>
           )}
           {up?.angle === active && <UploadOverlay up={up} />}
@@ -214,7 +217,7 @@ function UploadOverlay({ up }: { up: { progress: number; preview?: string; done?
             )}
           </div>
         </div>
-        <span className="rounded-full bg-surface/90 px-3 py-1 text-[11px] font-medium">
+        <span className="rounded-full bg-surface/90 px-3 py-1 text-xs font-medium">
           {up.done ? "Photo added" : "Uploading photo…"}
         </span>
       </div>

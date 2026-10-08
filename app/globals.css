@@ -11,7 +11,8 @@
   --color-ok: #34d399;
   --color-warn: #fbbf24;
   --color-bad: #f87171;
-  --font-sans: "Barlow", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  /* Body text uses the phone's own UI font (SF Pro on iPhone, Roboto on Android): built for small screens. */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Barlow Semi Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -45,6 +46,9 @@ html[data-theme="light"] {
 }
 
 html, body { height: 100%; }
+/* The app scrolls inside <main>; the page itself never rubber-bands or pull-to-refreshes mid-demo. */
+html, body { overscroll-behavior: none; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--color-bg);
   color: var(--color-ink);
@@ -68,7 +72,7 @@ input::placeholder { color: color-mix(in srgb, var(--color-muted) 80%, transpare
 *::-webkit-scrollbar { display: none; }
 
 input, select, button, textarea { font: inherit; }
-button { cursor: pointer; }
+button { cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: not-allowed; }
 
 /* The one scan line: used on the scanning screen and the launch animation. */

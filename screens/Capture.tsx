@@ -1,15 +1,15 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ProgressSteps } from "@/components/ProgressSteps";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { StickyActions } from "@/components/StickyActions";
 import { Button } from "@/components/ui/button";
-import { ANGLES, demoImageSet } from "@/lib/demoImages";
+import { ANGLES } from "@/lib/angles";
 
 export function CaptureScreen() {
-  const { draft, setImages, go, notify, settings } = useApp();
+  const { draft, setImages, go, notify } = useApp();
   const count = ANGLES.filter((a) => draft.images[a.key]).length;
 
   const analyze = () => {
@@ -19,24 +19,20 @@ export function CaptureScreen() {
   };
 
   return (
-    <div className="pb-8">
-      <ScreenHeader title="Capture tyre" subtitle="Take clear images of the tyre from the required angles." />
+    <div>
+      <ScreenHeader title="Capture tyre" subtitle="One clear photo is enough. More angles help." />
       <div className="px-5">
         <ProgressSteps step={2} />
         <div className="mt-5">
           <ImageUploader images={draft.images} onChange={setImages} />
         </div>
 
-        {settings.demoMode && <button
-          onClick={() => setImages(demoImageSet())}
-          className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 text-xs text-muted hover:text-ink"
-        >
-          <Sparkles size={13} /> Use demo images
-        </button>}
-
-        <Button className="mt-2" onClick={analyze} disabled={!count}>
-          Analyze tyre ({count}/5)
-        </Button>
+        {/* Always on screen: on small phones the button used to sit under the bottom nav */}
+        <StickyActions>
+          <Button onClick={analyze} disabled={!count}>
+            Analyze tyre ({count}/5)
+          </Button>
+        </StickyActions>
       </div>
     </div>
   );

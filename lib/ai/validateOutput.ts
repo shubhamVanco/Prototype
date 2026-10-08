@@ -16,7 +16,7 @@ const DOT_CODE = /\bDOT\s?[A-Z0-9]{2,}/i;
 
 /**
  * Strict validation of the model's JSON. Anything off => the caller returns MANUAL_REVIEW with
- * "AI output could not be validated reliably." (never a silent demo substitute).
+ * "AI output could not be validated reliably." (never a substitute result).
  * Rejection codes must exist in the configured criteria: codes are never invented.
  */
 export function validateModelOutput(x: unknown, operatorContext: string, criteria: RetreadCriterion[]): Check {

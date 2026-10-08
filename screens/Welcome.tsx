@@ -1,10 +1,9 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useApp } from "@/components/app-context";
 import { Button } from "@/components/ui/button";
 
-/** First-run screen: one drawn tyre with a scan line, then the promise and two actions. */
+/** First-run screen: one drawn tyre, then the promise and two actions. */
 export function WelcomeScreen() {
   const { go, updateSettings, startNew } = useApp();
   const enter = () => updateSettings({ welcomed: true });
@@ -25,12 +24,6 @@ export function WelcomeScreen() {
             <circle cx="100" cy="100" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
             <circle cx="100" cy="100" r="9" fill="currentColor" />
           </svg>
-          <motion.div
-            className="absolute inset-x-0 h-0.5 bg-ink"
-            initial={{ top: "4%" }}
-            animate={{ top: ["4%", "96%", "4%"] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: [0.45, 0, 0.55, 1] }}
-          />
         </div>
       </div>
 
@@ -45,7 +38,7 @@ export function WelcomeScreen() {
 
       <div className="mt-7 space-y-3">
         <Button onClick={() => { enter(); startNew(); go("dashboard"); go("new"); }}>Start inspection</Button>
-        <Button variant="secondary" onClick={() => { enter(); go("dashboard"); }}>View demo</Button>
+        <Button variant="secondary" onClick={() => { enter(); go("dashboard"); }}>Open dashboard</Button>
       </div>
     </div>
   );

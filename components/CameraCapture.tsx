@@ -129,13 +129,13 @@ export function CameraCapture({
             >
               <ImagePlus size={16} /> Choose photo
             </button>
-            <button onClick={() => void start()} className="text-xs text-muted underline">Try camera again</button>
+            <button onClick={() => void start()} className="min-h-11 text-sm text-muted underline">Try camera again</button>
           </div>
         )}
 
         {torchMsg && (
           <div className="absolute inset-x-0 top-3 text-center">
-            <span className="rounded-full bg-black/70 px-3 py-1 text-xs">{torchMsg}</span>
+            <span className="rounded-full bg-black/70 px-3 py-1 text-sm">{torchMsg}</span>
           </div>
         )}
       </div>

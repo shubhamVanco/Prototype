@@ -1,6 +1,6 @@
 "use client";
 
-import { Factory, MapPin, Moon, Sun } from "lucide-react";
+import { Factory, Moon, Sun } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { cn } from "@/lib/cn";
 
@@ -18,11 +18,6 @@ export function ProfileScreen() {
           <span className="text-sm text-muted">Plant</span>
           <span className="ml-auto text-right text-sm font-medium">Tyre Retreading Unit</span>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3.5">
-          <MapPin size={16} className="text-muted" />
-          <span className="text-sm text-muted">Location</span>
-          <span className="ml-auto text-right text-sm font-medium">Demo Facility</span>
-        </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3.5">
@@ -30,7 +25,7 @@ export function ProfileScreen() {
           {light ? <Sun size={18} className="text-warn" /> : <Moon size={18} className="text-brand" />}
           <div>
             <div className="text-sm font-medium">{light ? "Light mode" : "Dark mode"}</div>
-            <div className="text-xs text-muted">Switch the app appearance</div>
+            <div className="text-sm text-muted">Switch the app appearance</div>
           </div>
         </div>
         <button

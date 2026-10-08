@@ -1,41 +1,7 @@
-import type { Defect, OverallStatus } from "@/types";
+import type { OverallStatus } from "@/types";
 
 export const DISCLAIMER =
-  "AI pre-screening detects visible defects. Final retreadability must be confirmed through the organization's approved inspection process.";
-
-export interface Decision {
-  status: OverallStatus;
-  summary: string;
-  recommendation: string;
-}
-
-/**
- * Pre-screening decision policy (shared by every engine):
- *  - any CRITICAL visible defect        -> REJECT
- *  - HIGH / MEDIUM / uncertain defect   -> REVIEW
- *  - only minor (LOW) defects           -> ACCEPT (for further inspection only)
- */
-export function decide(defects: Defect[]): Decision {
-  if (defects.some((d) => d.severity === "CRITICAL")) {
-    return {
-      status: "REJECT",
-      summary: "Critical visible defects detected.",
-      recommendation: "Do not send to retreading plant.",
-    };
-  }
-  if (defects.some((d) => d.severity === "HIGH" || d.severity === "MEDIUM" || d.confidence < 85)) {
-    return {
-      status: "REVIEW",
-      summary: "Defects that need a human decision were detected.",
-      recommendation: "Do not automatically reject. Send tyre for manual casing inspection.",
-    };
-  }
-  return {
-    status: "ACCEPT",
-    summary: "No critical visible defects detected.",
-    recommendation: "Suitable for further retreading inspection.",
-  };
-}
+  "AI pre-screening of visible conditions. The plant's physical inspection makes the final call.";
 
 export const STATUS_LABEL: Record<OverallStatus, string> = {
   ACCEPT: "Accept",
@@ -49,9 +15,6 @@ export const STATUS_HEADLINE: Record<OverallStatus, string> = {
   REJECT: "Retread reject",
 };
 
-export const INTERNAL_NOTE =
-  "Simulated findings for demonstration only. Not derived from the photo.";
-
 export type Verdict = "YES" | "HOLD" | "NO";
 
 /** Plain operator-facing routing decision. It is a pre-screen outcome, NOT a certified retreadability approval. */
@@ -59,7 +22,7 @@ export const ROUTING: Record<OverallStatus, { verdict: Verdict; title: string; n
   ACCEPT: {
     verdict: "YES",
     title: "Send to plant",
-    note: "No configured rejection condition seen. The plant's own inspection still makes the final call.",
+    note: "No rejection condition seen. The plant's inspection makes the final call.",
   },
   REVIEW: {
     verdict: "HOLD",
@@ -69,6 +32,14 @@ export const ROUTING: Record<OverallStatus, { verdict: Verdict; title: string; n
   REJECT: {
     verdict: "NO",
     title: "Do not send",
-    note: "A configured retread rejection condition is visible. Escalate per your inspection procedure.",
+    note: "A retread rejection condition is visible.",
   },
+};
+
+/** Routing for photos rejected because no tyre was found in them. */
+export const NOT_A_TYRE_ROUTING = {
+  verdict: "NO" as Verdict,
+  title: "Rejected: not a tyre",
+  note: "No tyre was found in the photo.",
+  headline: "Not a tyre",
 };

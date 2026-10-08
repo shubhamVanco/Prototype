@@ -1,4 +1,4 @@
-import { ANGLES } from "@/lib/demoImages";
+import { ANGLES } from "@/lib/angles";
 import type { ImageAngle, OverallStatus, TyreInspectionResult } from "@/types";
 import type { InspectTyreResponse, RetreadDecision } from "@/types/tyreInspection";
 import type { InspectionInput } from "./tyreInspection";
@@ -10,16 +10,14 @@ const STATUS: Record<RetreadDecision, OverallStatus> = {
 };
 
 const ACTION_TEXT: Record<RetreadDecision, string> = {
-  NO_VISIBLE_RETREAD_REJECTION:
-    "No configured retreading rejection condition was visibly identified from the supplied image. Proceed to the next approved inspection stage.",
+  NO_VISIBLE_RETREAD_REJECTION: "Proceed to the plant's next inspection stage.",
   MANUAL_REVIEW: "Manual inspection required.",
-  RETREAD_REJECT:
-    "Do not proceed directly through normal intake. Escalate according to the organization's approved tyre inspection procedure.",
+  RETREAD_REJECT: "Do not send. Escalate per your inspection procedure.",
 };
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
-  if (!m) return null; // e.g. SVG placeholders can't be inspected
+  if (!m) return null;
   const bin = atob(m[2]);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -46,8 +44,31 @@ function postForm(
   });
 }
 
+/** Hard rule: photos without a tyre are REJECTED with a short reason, never sent to manual review. */
+function notATyreResult(error: string, views: { view: string; subject: string; confidence: number }[]): TyreInspectionResult {
+  const confidence = views.length ? views.reduce((a, v) => a + v.confidence, 0) / views.length : 1;
+  return {
+    overallStatus: "REJECT",
+    confidence: Math.round(confidence * 100),
+    summary: error || "No tyre found in the photo.",
+    recommendation: "Upload a clear photo of a tyre.",
+    engine: "OpenAI Vision",
+    mode: "REAL_AI",
+    notATyre: true,
+    rejectionReasons: (views.length ? views : [{ view: "Photo", subject: "no tyre", confidence }]).map((v) => ({
+      code: "NOT_A_TYRE",
+      name: "Not a tyre",
+      location: v.view,
+      evidence: `The photo shows ${v.subject}.`,
+      why: "Only tyre photos can be inspected.",
+      confidence: Math.round(v.confidence * 100),
+    })),
+    observations: [],
+  };
+}
+
 /** Vision engine: POSTs the photos to /api/inspect-tyre (OpenAI runs server-side). */
-export async function runLlmInspection(input: InspectionInput): Promise<TyreInspectionResult> {
+export async function runAiInspection(input: InspectionInput): Promise<TyreInspectionResult> {
   const form = new FormData();
   const angles: ImageAngle[] = [];
   for (const a of ANGLES) {
@@ -64,6 +85,7 @@ export async function runLlmInspection(input: InspectionInput): Promise<TyreInsp
   form.append("inspectionContext", `Tyre type declared by operator: ${input.tyre.type}`);
 
   const { ok, json } = await postForm("/api/inspect-tyre", form, input.onUploadProgress);
+  if (json && !json.success && json.code === "NOT_A_TYRE") return notATyreResult(json.error, json.notTyre ?? []);
   if (!ok || !json || !json.success) {
     throw new Error(json && !json.success ? json.error : "http-error");
   }
@@ -76,10 +98,7 @@ export async function runLlmInspection(input: InspectionInput): Promise<TyreInsp
     : o.image_quality.score;
 
   const base = {
-    // New-style findings are rendered from rejectionReasons / observations, not from `defects`.
-    defects: [],
     engine: `OpenAI Vision (${json.model})`,
-    demo: false,
     imageQuality: o.image_quality,
     areasNotAssessable: o.areas_not_assessed,
     followUp: o.required_follow_up,
@@ -96,7 +115,7 @@ export async function runLlmInspection(input: InspectionInput): Promise<TyreInsp
   if (!json.validated) {
     return {
       ...base, overallStatus: "REVIEW", confidence: 0, mode: "UNAVAILABLE",
-      summary: "AI output could not be validated reliably.", recommendation: "Manual inspection required.",
+      summary: "AI output could not be validated.", recommendation: "Manual inspection required.",
     };
   }
   return {
@@ -104,7 +123,7 @@ export async function runLlmInspection(input: InspectionInput): Promise<TyreInsp
     overallStatus: STATUS[o.decision],
     confidence: Math.round(confidence * 100),
     mode: "REAL_AI",
-    summary: o.decision_reason.replace(/\s*Final retreadability must be determined through the organization's approved physical inspection process\.?/i, "").trim(),
+    summary: o.decision_reason,
     recommendation: ACTION_TEXT[o.decision],
   };
 }

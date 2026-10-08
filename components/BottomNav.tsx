@@ -12,17 +12,25 @@ const ITEMS: { key: string; label: string; icon: typeof Home; screen: Screen }[]
   { key: "profile", label: "Profile", icon: User, screen: "profile" },
 ];
 
+/** Which tab a screen belongs to, so the nav still shows where you are inside a flow. */
+const TAB_OF: Record<Screen, string> = {
+  welcome: "home", dashboard: "home",
+  new: "inspect", capture: "inspect", scanning: "inspect", result: "inspect",
+  history: "history", detail: "history",
+  profile: "profile",
+};
+
 /** Four identical tabs: same size, same icon + label layout, same active indicator. */
 export function BottomNav() {
   const { screen, go, startNew } = useApp();
   return (
     <nav
-      className="relative z-10 border-t border-line bg-bg px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5"
+      className="relative z-10 shrink-0 border-t border-line bg-bg px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5 md:pb-5"
       aria-label="Main"
     >
       <ul className="grid grid-cols-4">
         {ITEMS.map((it) => {
-          const active = screen === it.screen;
+          const active = TAB_OF[screen] === it.key;
           const Icon = it.icon;
           return (
             <li key={it.key}>
@@ -43,7 +51,7 @@ export function BottomNav() {
                 >
                   <Icon size={21} />
                 </span>
-                <span className={cn("text-[11px] font-medium leading-none", active ? "text-ink" : "text-muted")}>
+                <span className={cn("text-xs font-medium leading-none", active ? "text-ink" : "text-muted")}>
                   {it.label}
                 </span>
               </motion.button>

@@ -8,7 +8,7 @@ import type { InspectionRecord, TyreImages, TyreInfo } from "@/types";
 
 export type Screen =
   | "welcome" | "dashboard" | "new" | "capture" | "scanning"
-  | "result" | "defect" | "history" | "detail" | "profile";
+  | "result" | "history" | "detail" | "profile";
 
 export const TAB_SCREENS: Screen[] = ["dashboard", "history", "profile"];
 
@@ -31,8 +31,6 @@ interface Ctx {
   setCurrent: (r: InspectionRecord | null) => void;
   isSaved: (id: string) => boolean;
   saveCurrent: () => boolean;
-  defectId: string | null;
-  openDefect: (id: string) => void;
   toast: Toast | null;
   notify: (message: string, tone?: Toast["tone"]) => void;
 }
@@ -58,17 +56,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     tyre: emptyTyre("TV-1025"), images: {},
   });
   const [current, setCurrent] = useState<InspectionRecord | null>(null);
-  const [defectId, setDefectId] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const s = loadSettings();
     const h = loadHistory();
-    // Developer shortcut: ?demo=ACCEPT|REVIEW|REJECT|SEPARATION turns on simulated results for this visit only.
-    const demo = new URLSearchParams(window.location.search).get("demo")?.toUpperCase();
-    const scenario = (["ACCEPT", "REVIEW", "REJECT", "SEPARATION"] as const).find((x) => x === demo);
-    setSettings(scenario ? { ...s, demoMode: true, scenario } : s);
+    setSettings(s);
     setHistory(h);
     setStack([s.welcomed ? "dashboard" : "welcome"]);
     setDraft({ tyre: emptyTyre(nextId(h)), images: {} });
@@ -123,7 +117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notify("Already saved", "info");
       return true;
     }
-    const record = { ...current, user: true };
+    const record = { ...current };
     const next = [record, ...history];
     setHistory(next);
     setCurrent(record);
@@ -132,20 +126,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, [current, history, notify]);
 
-  const openDefect = useCallback((id: string) => {
-    setDefectId(id);
-    setStack((st) => [...st, "defect"]);
-  }, []);
-
   const value = useMemo<Ctx>(
     () => ({
       ready, screen, go, back, settings, updateSettings, history, nextTyreId, draft,
       setTyre: (tyre) => setDraft((d) => ({ ...d, tyre })),
       setImages: (images) => setDraft((d) => ({ ...d, images })),
-      startNew, current, setCurrent, isSaved, saveCurrent, defectId, openDefect, toast, notify,
+      startNew, current, setCurrent, isSaved, saveCurrent, toast, notify,
     }),
     [ready, screen, go, back, settings, updateSettings, history, nextTyreId, draft, startNew,
-      current, isSaved, saveCurrent, defectId, openDefect, toast, notify],
+      current, isSaved, saveCurrent, toast, notify],
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
