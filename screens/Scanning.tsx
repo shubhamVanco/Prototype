@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Check, Circle, Loader2 } from "lucide-react";
 import { useApp } from "@/components/app-context";
-import { ModeBadge } from "@/components/ModeBadge";
 import { ScanAnimation } from "@/components/ScanAnimation";
 import { cn } from "@/lib/cn";
 import { ANGLES } from "@/lib/angles";
@@ -70,12 +69,9 @@ export function ScanningScreen() {
 
   return (
     <div className="px-5 pb-8 pt-8">
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 role="status" className="text-xl font-semibold">Analyzing tyre…</h1>
-          <p className="text-sm text-muted">{draft.tyre.tyreId} · {draft.tyre.brand} · {draft.tyre.type}</p>
-        </div>
-        <ModeBadge mode="REAL_AI" />
+      <div className="mb-5">
+        <h1 role="status" className="text-xl font-semibold">Analyzing tyre…</h1>
+        <p className="text-sm text-muted">{draft.tyre.tyreId} · {draft.tyre.brand} · {draft.tyre.type}</p>
       </div>
 
       <ScanAnimation src={draft.images.full ?? Object.values(draft.images).find(Boolean)} />

@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Cpu, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { NOT_A_TYRE_ROUTING, ROUTING } from "@/lib/decision";
 import type { TyreInspectionResult } from "@/types";
 import { STATUS_STYLE } from "./InspectionStatus";
 
 /**
  * The answer to "should this tyre go to the retreading plant?" in one compact block:
- * verdict + title on one row, the AI's one specific reason under it, confidence and source in a footer.
+ * verdict + title on one row, the AI's one specific reason under it, confidence in a footer.
  * Each fact is said once. A failed or unavailable analysis can never say YES.
  */
 export function Decision({ result }: { result: TyreInspectionResult }) {
@@ -43,9 +43,8 @@ export function Decision({ result }: { result: TyreInspectionResult }) {
         {unavailable ? (
           <span className="inline-flex items-center gap-1.5 text-bad"><ShieldAlert size={14} /> AI unavailable</span>
         ) : (
-          <span className="inline-flex items-center gap-1.5"><Cpu size={14} /> Real AI analysis</span>
+          <span className="tabular">Confidence <b className="font-semibold text-ink">{result.confidence}%</b></span>
         )}
-        {!unavailable && <span className="tabular">Confidence <b className="font-semibold text-ink">{result.confidence}%</b></span>}
       </div>
     </section>
   );

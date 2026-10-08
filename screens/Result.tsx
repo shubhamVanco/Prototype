@@ -3,7 +3,7 @@
 import { Bookmark, Check, FileText, RefreshCw, ScanLine } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { Decision } from "@/components/Decision";
-import { Disclaimer } from "@/components/ModeBadge";
+import { Disclaimer } from "@/components/Disclaimer";
 import { Findings } from "@/components/Findings";
 import { MorePhotos, needsMorePhotos } from "@/components/MorePhotos";
 import { ScreenHeader } from "@/components/ScreenHeader";

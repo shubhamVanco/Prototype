@@ -3,10 +3,6 @@ import { DISCLAIMER, NOT_A_TYRE_ROUTING, ROUTING, STATUS_HEADLINE } from "./deci
 import { fullDate } from "./format";
 
 const COLORS = { ACCEPT: "#15803d", REVIEW: "#b45309", REJECT: "#b91c1c" } as const;
-const MODE = {
-  REAL_AI: "REAL AI ANALYSIS",
-  UNAVAILABLE: "AI INSPECTION UNAVAILABLE",
-} as const;
 
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -39,7 +35,7 @@ img{width:130px;height:100px;object-fit:cover;border-radius:6px;margin:0 8px 8px
 <h1>TYREVISION AI</h1><div class="sub">AI PRE-SCREENING REPORT</div>
 <div><b>Inspection ID:</b> ${esc(r.id)} &nbsp;·&nbsp; ${fullDate(r.createdAt)}</div>
 <div style="margin-top:6px"><b>Tyre (operator-entered):</b> ${esc(r.tyre.brand || "NOT_PROVIDED")} / ${esc(r.tyre.type)}</div>
-<h2>Analysis mode</h2><span class="mode">${MODE[mode]}</span>
+${unavailable ? `<h2>Analysis</h2><span class="mode">AI INSPECTION UNAVAILABLE</span>` : ""}
 <h2>Overall status</h2><span class="status">${esc(headline)}</span>
 <p class="muted">${esc(res.summary)}</p>
 <h2>Send to retreading plant?</h2><p><b>${route.verdict} - ${esc(route.title)}</b><br><span class="muted">${esc(route.note)}</span></p>
