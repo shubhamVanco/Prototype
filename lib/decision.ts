@@ -3,18 +3,6 @@ import type { OverallStatus } from "@/types";
 export const DISCLAIMER =
   "AI pre-screening of visible conditions. The plant's physical inspection makes the final call.";
 
-export const STATUS_LABEL: Record<OverallStatus, string> = {
-  ACCEPT: "Accept",
-  REVIEW: "Review",
-  REJECT: "Reject",
-};
-
-export const STATUS_HEADLINE: Record<OverallStatus, string> = {
-  ACCEPT: "No visible retread rejection",
-  REVIEW: "Manual review required",
-  REJECT: "Retread reject",
-};
-
 export type Verdict = "YES" | "HOLD" | "NO";
 
 /** Plain operator-facing routing decision. It is a pre-screen outcome, NOT a certified retreadability approval. */
@@ -35,6 +23,25 @@ export const ROUTING: Record<OverallStatus, { verdict: Verdict; title: string; n
     note: "A retread rejection condition is visible.",
   },
 };
+
+/** Every screen (result, dashboard, history, report) uses the same YES / HOLD / NO wording. */
+export const STATUS_LABEL: Record<OverallStatus, Verdict> = {
+  ACCEPT: ROUTING.ACCEPT.verdict,
+  REVIEW: ROUTING.REVIEW.verdict,
+  REJECT: ROUTING.REJECT.verdict,
+};
+
+export const STATUS_HEADLINE: Record<OverallStatus, string> = {
+  ACCEPT: `${ROUTING.ACCEPT.verdict}: ${ROUTING.ACCEPT.title}`,
+  REVIEW: `${ROUTING.REVIEW.verdict}: ${ROUTING.REVIEW.title}`,
+  REJECT: `${ROUTING.REJECT.verdict}: ${ROUTING.REJECT.title}`,
+};
+
+/** HOLD has no verdict to be confident in; show photo quality there instead of a confidence figure. */
+export function confidenceLabel(r: { overallStatus: OverallStatus; confidence: number; imageQuality?: { score: number } }): string | null {
+  if (r.overallStatus !== "REVIEW") return `${r.confidence}% confidence`;
+  return r.imageQuality ? `Photo quality ${Math.round(r.imageQuality.score * 100)}%` : null;
+}
 
 /** Routing for photos rejected because no tyre was found in them. */
 export const NOT_A_TYRE_ROUTING = {

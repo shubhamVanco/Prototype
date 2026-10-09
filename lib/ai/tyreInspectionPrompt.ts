@@ -281,10 +281,21 @@ not exist.
 MULTIPLE IMAGES
 ============================================================
 
-If multiple images are provided, evaluate them collectively.
+If multiple images are provided, inspect EACH image on its own first,
+then combine the results.
+
+A rejection condition that is clearly visible in ANY single image is
+enough for RETREAD_REJECT, even if every other image looks normal.
+Never average across images, and never let normal-looking views hide
+a defect seen in another view. List every such condition in
+retread_rejection_reasons, naming the view in "location".
 
 Only make a rejection decision when the relevant rejection condition
 is sufficiently visible.
+
+In visual_evidence, describe what the camera shows (for example
+"cord strands visible through torn tread", "open crack in sidewall"),
+not an inferred internal state.
 
 If an important tyre region has not been provided:
 

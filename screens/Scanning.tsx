@@ -9,13 +9,26 @@ import { ANGLES } from "@/lib/angles";
 import { runTyreInspection } from "@/services/tyreInspection";
 import type { TyreInspectionResult } from "@/types";
 
-// Only steps that actually happen.
-const STAGES = ["Uploading photos", "Checking for a tyre", "Checking retread rejection criteria", "Preparing result"];
+// Only steps that actually happen. The tyre check and the criteria check run in parallel on the server.
+const STAGES = ["Uploading photos", "Checking for a tyre and rejection criteria", "Preparing result"];
+
+// Share of the bar each step gets; the AI step eases toward its end so the bar never stalls or jumps.
+const UPLOAD_SHARE = 15;
+const AI_END = 92;
+const AI_EASE_MS = 12_000;
+const TICK_MS = 200;
 
 export function ScanningScreen() {
   const { draft, go, back, setCurrent, notify, setImages } = useApp();
   const [phase, setPhase] = useState(0); // index of the active stage
   const [upload, setUpload] = useState(0);
+  const [aiStartedAt, setAiStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +56,10 @@ export function ScanningScreen() {
       onUploadProgress: (f) => {
         if (cancelled) return;
         setUpload(f);
-        if (f >= 1) setPhase((x) => Math.max(x, 1));
+        if (f >= 1) {
+          setPhase((x) => Math.max(x, 1));
+          setAiStartedAt((t) => t ?? Date.now());
+        }
       },
     })
       .then((r) => {
@@ -65,7 +81,12 @@ export function ScanningScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const percent = Math.min(100, phase * 25 + (phase === 0 ? upload * 25 : 10));
+  const aiEased = aiStartedAt === null ? 0 : 1 - Math.exp(-(now - aiStartedAt) / AI_EASE_MS);
+  const percent =
+    phase === 0 ? upload * UPLOAD_SHARE
+      : phase === 1 ? UPLOAD_SHARE + (AI_END - UPLOAD_SHARE) * aiEased
+        : phase === 2 ? AI_END
+          : 100;
 
   return (
     <div className="px-5 pb-8 pt-8">
@@ -92,7 +113,7 @@ export function ScanningScreen() {
               {state === "active" && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
               {state === "todo" && <Circle size={16} aria-hidden="true" />}
               {s}
-              {i === 0 && state === "active" && (
+              {i === 0 && state === "active" && upload > 0 && (
                 <span className="tabular ml-auto text-sm text-muted">{Math.round(upload * 100)}%</span>
               )}
             </li>

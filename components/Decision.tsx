@@ -43,7 +43,9 @@ export function Decision({ result }: { result: TyreInspectionResult }) {
         {unavailable ? (
           <span className="inline-flex items-center gap-1.5 text-bad"><ShieldAlert size={14} /> AI unavailable</span>
         ) : (
-          <span className="tabular">Confidence <b className="font-semibold text-ink">{result.confidence}%</b></span>
+          status === "REVIEW"
+            ? result.imageQuality && <span className="tabular">Photo quality <b className="font-semibold text-ink">{Math.round(result.imageQuality.score * 100)}%</b></span>
+            : <span className="tabular">Confidence <b className="font-semibold text-ink">{result.confidence}%</b></span>
         )}
       </div>
     </section>

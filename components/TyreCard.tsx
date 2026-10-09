@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { confidenceLabel } from "@/lib/decision";
 import { timeAgo } from "@/lib/format";
 import type { InspectionRecord } from "@/types";
 import { InspectionStatus } from "./InspectionStatus";
@@ -20,7 +21,7 @@ export function TyreCard({
           <span className="mt-0.5 block truncate text-sm text-muted">{record.tyre.brand} · {record.tyre.type}</span>
           <span className="mt-0.5 block text-sm text-muted">
             {timeAgo(record.createdAt)}
-            {showConfidence && <> · <span className="tabular">{record.result.confidence}%</span> confidence</>}
+            {showConfidence && confidenceLabel(record.result) && <> · <span className="tabular">{confidenceLabel(record.result)}</span></>}
           </span>
         </span>
         <ChevronRight size={16} className="shrink-0 text-muted" aria-hidden="true" />

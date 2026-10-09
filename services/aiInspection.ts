@@ -92,10 +92,13 @@ export async function runAiInspection(input: InspectionInput): Promise<TyreInspe
 
   const o = json.inspection;
   const reasons = o.retread_rejection_reasons;
-  // Confidence = confidence in the visual observations (not a safety probability).
-  const confidence = reasons.length
-    ? reasons.reduce((a, r) => a + r.confidence, 0) / reasons.length
-    : o.image_quality.score;
+  // Confidence = confidence in the verdict's visual evidence (not a safety probability).
+  // NO: the strongest rejection reason. YES: photo quality backs "nothing visible".
+  // HOLD has no verdict to be confident in, so it reports none (the UI shows photo quality instead).
+  const top = reasons.reduce((m, r) => Math.max(m, r.confidence), 0);
+  const confidence = o.decision === "RETREAD_REJECT" ? top
+    : o.decision === "NO_VISIBLE_RETREAD_REJECTION" ? o.image_quality.score
+      : 0;
 
   const base = {
     engine: `OpenAI Vision (${json.model})`,

@@ -4,6 +4,7 @@ import { Plus, ScanLine } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { TyreCard } from "@/components/TyreCard";
 import { Button } from "@/components/ui/button";
+import { STATUS_HEADLINE } from "@/lib/decision";
 
 function greeting() {
   const h = new Date().getHours();
@@ -18,9 +19,9 @@ export function DashboardScreen() {
   const today = history.filter((r) => isToday(r.createdAt));
   const count = (s: "ACCEPT" | "REVIEW" | "REJECT") => today.filter((r) => r.result.overallStatus === s).length;
   const rows = [
-    { key: "ACCEPT" as const, label: "No rejection seen", n: count("ACCEPT"), bar: "bg-ok" },
-    { key: "REVIEW" as const, label: "Manual review", n: count("REVIEW"), bar: "bg-warn" },
-    { key: "REJECT" as const, label: "Rejected", n: count("REJECT"), bar: "bg-bad" },
+    { key: "ACCEPT" as const, label: STATUS_HEADLINE.ACCEPT, n: count("ACCEPT"), bar: "bg-ok" },
+    { key: "REVIEW" as const, label: STATUS_HEADLINE.REVIEW, n: count("REVIEW"), bar: "bg-warn" },
+    { key: "REJECT" as const, label: STATUS_HEADLINE.REJECT, n: count("REJECT"), bar: "bg-bad" },
   ];
   const total = today.length;
 

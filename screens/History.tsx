@@ -5,11 +5,12 @@ import { SearchX, Search } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { TyreCard } from "@/components/TyreCard";
 import { cn } from "@/lib/cn";
+import { STATUS_LABEL } from "@/lib/decision";
 import type { OverallStatus } from "@/types";
 
 const FILTERS: { key: "ALL" | OverallStatus; label: string }[] = [
-  { key: "ALL", label: "All" }, { key: "ACCEPT", label: "Accepted" },
-  { key: "REVIEW", label: "Review" }, { key: "REJECT", label: "Rejected" },
+  { key: "ALL", label: "All" }, { key: "ACCEPT", label: STATUS_LABEL.ACCEPT },
+  { key: "REVIEW", label: STATUS_LABEL.REVIEW }, { key: "REJECT", label: STATUS_LABEL.REJECT },
 ];
 
 export function HistoryScreen() {

@@ -2,12 +2,13 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { debugLog, imageDimensions } from "@/lib/ai/imageInfo";
 import { getRetreadCriteria } from "@/lib/ai/retreadCriteria";
-import { brief, briefList } from "@/lib/ai/brief";
+import { brief } from "@/lib/ai/brief";
+import { normalizeOutput } from "@/lib/ai/normalizeOutput";
 import { INTERNAL_DEFECT_NOTICE, TYRE_INSPECTION_PROMPT } from "@/lib/ai/tyreInspectionPrompt";
 import { TYRE_INSPECTION_SCHEMA } from "@/lib/ai/tyreInspectionSchema";
 import { NOT_A_TYRE_CODE, TYRE_GATE_PROMPT, TYRE_GATE_SCHEMA, gateFailures } from "@/lib/ai/tyreGate";
 import { validateModelOutput } from "@/lib/ai/validateOutput";
-import type { InspectTyreResponse, RetreadDecision, TyreInspectionResult } from "@/types/tyreInspection";
+import type { InspectTyreResponse, TyreInspectionResult } from "@/types/tyreInspection";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,7 +16,6 @@ export const maxDuration = 60;
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGES = 5;
 const TIMEOUT_MS = 45_000;
-const MIN_REJECT_CONFIDENCE = 0.7;
 
 const fail = (status: number, error: string) =>
   NextResponse.json<InspectTyreResponse>({ success: false, error }, { status });
@@ -33,19 +33,6 @@ function sniff(b: Uint8Array): "image/jpeg" | "image/png" | "image/webp" | null 
   return null;
 }
 
-const FORBIDDEN = /approved for retreading|(?:tyre|tire) is (?:completely |totally )?safe|suitable for retreading|no internal damage|all defects (?:have been|were) detected|100% accurate|definitely unsafe|unsafe tyre|bad tyre|defective tyre/i;
-
-/** If the model uses a forbidden claim, discard its sentence and use a fixed safe one. */
-function sanitize(s: string, safe: string): string {
-  return FORBIDDEN.test(s) ? safe : s;
-}
-
-const INTERNAL_CLAIM = /\b(internal|belt|casing|ply)\b/i;
-const DAMAGE_WORD = /(damage|separation|failure|broken|fractur)/i;
-const HEDGED = /(possible|possibly|may|might|could|cannot|can't|not (?:confirmed|assessed|assessable|visible|determin)|unable|unclear)/i;
-/** Hidden/internal damage stated as fact is not allowed as a rejection basis from an RGB photo. */
-const claimsInternalDamage = (t: string) => INTERNAL_CLAIM.test(t) && DAMAGE_WORD.test(t) && !HEDGED.test(t);
-
 function unvalidated(): TyreInspectionResult {
   return {
     decision: "MANUAL_REVIEW",
@@ -60,63 +47,14 @@ function unvalidated(): TyreInspectionResult {
   };
 }
 
-/**
- * Conservative post-processing. The prompt is the first line of defence; this enforces the same
- * rules in code so a model slip can never produce an unsupported reject or an unsafe pass.
- */
-function normalize(r: TyreInspectionResult): TyreInspectionResult {
-  // Rejection reasons must rest on concrete visible evidence, not on hidden-damage claims.
-  const reasons = r.retread_rejection_reasons.filter(
-    (d) => d.visual_evidence.trim() && !claimsInternalDamage(`${d.visual_evidence} ${d.why_it_meets_rejection_criterion}`),
-  );
-
-  const areas = briefList(r.areas_not_assessed, 4);
-  if (!areas.some((a) => /internal/i.test(a))) areas.push("Internal casing condition");
-  const limitations = briefList(r.limitations, 2);
-
-  const goodImage = r.tyre_detected && r.image_quality.usable;
-  const solid = reasons.some((d) => d.confidence >= MIN_REJECT_CONFIDENCE);
-  let decision: RetreadDecision = r.decision;
-
-  if (decision === "RETREAD_REJECT" && (!goodImage || !solid)) decision = "MANUAL_REVIEW";
-  if (decision === "NO_VISIBLE_RETREAD_REJECTION") {
-    // A pass cannot stand with an unusable image, a pending rejection candidate, or unresolved follow-up.
-    if (!goodImage || reasons.length || r.required_follow_up.length) decision = "MANUAL_REVIEW";
-  }
-
-  const safeReason =
-    decision === "NO_VISIBLE_RETREAD_REJECTION"
-      ? "No rejection condition visible in the photos."
-      : decision === "RETREAD_REJECT"
-        ? "A retread rejection condition is clearly visible."
-        : "Evidence is unclear. A person must inspect this tyre.";
-  // If the server changed the model's decision, the model's own explanation no longer fits.
-  const reason = decision !== r.decision ? safeReason : brief(sanitize(r.decision_reason, safeReason)) || safeReason;
-
-  // Every text the user sees is kept to 2-3 lines.
-  return {
-    ...r,
-    decision,
-    image_quality: { ...r.image_quality, issues: briefList(r.image_quality.issues.map((i) => sanitize(i, "Image issue noted."))) },
-    retread_rejection_reasons: reasons.slice(0, 3).map((d) => ({
-      ...d,
-      criterion_name: brief(d.criterion_name, 60),
-      location: brief(d.location, 60),
-      visual_evidence: brief(d.visual_evidence),
-      why_it_meets_rejection_criterion: brief(d.why_it_meets_rejection_criterion),
-    })),
-    observations_not_automatic_rejection: r.observations_not_automatic_rejection.slice(0, 3).map((o) => ({
-      ...o,
-      name: brief(o.name, 60),
-      location: brief(o.location, 60),
-      visual_evidence: brief(sanitize(o.visual_evidence, "Visible feature; confirm by physical inspection.")),
-      reason_not_rejection: brief(o.reason_not_rejection),
-    })),
-    areas_not_assessed: areas,
-    decision_reason: reason,
-    required_follow_up: briefList(r.required_follow_up, 2),
-    limitations,
-  };
+/** Maps an OpenAI SDK error to the response the client sees. */
+function upstreamFailure(e: unknown, label: string, model: string, t0: number) {
+  const status = e instanceof OpenAI.APIError ? e.status : undefined;
+  const timedOut = e instanceof OpenAI.APIConnectionTimeoutError;
+  console.error(`[inspect-tyre] ${label}`, { model, ms: Date.now() - t0, status, timedOut });
+  if (timedOut) return fail(504, "The AI took too long to respond. Please try again.");
+  if (status === 429) return fail(503, "The AI service is busy. Please try again shortly.");
+  return fail(502, "The AI inspection service is unavailable. Please try again.");
 }
 
 export async function POST(req: Request) {
@@ -165,11 +103,43 @@ export async function POST(req: Request) {
   const criteria = getRetreadCriteria();
   const intro =
     imageParts.length > 1
-      ? `${imageParts.length} images are supplied as views of the same tyre. Views, in order: ${views.map((v, i) => `${i + 1}) ${v}`).join(", ")}.`
+      ? `${imageParts.length} images are supplied as views of the same tyre. Views, in order: ${views.map((v, i) => `${i + 1}) ${v}`).join(", ")}. ` +
+        "Inspect EACH image on its own: a rejection condition clearly visible in any single image is enough for RETREAD_REJECT, even if the other images look normal."
       : "One image is supplied.";
   const model = process.env.OPENAI_VISION_MODEL || "gpt-4.1";
   const client = new OpenAI({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
   const t0 = Date.now();
+
+  // The tyre gate and the inspection run in parallel to halve the wait. The gate still decides first:
+  // no inspection result is used unless every photo passed it, and the inspection is aborted if one fails.
+  const inspectionAbort = new AbortController();
+  const inspectionCall = client.responses.create(
+    {
+      model,
+      instructions: TYRE_INSPECTION_PROMPT,
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                `${intro}\n\nRETREAD_REJECTION_CRITERIA (the only authority for RETREAD_REJECT; use these exact codes):\n${JSON.stringify(criteria, null, 2)}` +
+                (ctx ? `\n\nOperator-supplied context (unverified; not visual evidence):\n${ctx}` : ""),
+            },
+            ...imageParts,
+          ],
+        },
+      ],
+      text: {
+        format: { type: "json_schema", name: "tyre_retread_prescreen", strict: true, schema: TYRE_INSPECTION_SCHEMA as unknown as Record<string, unknown> },
+      },
+      store: false,
+    },
+    { signal: inspectionAbort.signal },
+  );
+  // Handled below; this stops an aborted call from surfacing as an unhandled rejection.
+  inspectionCall.catch(() => {});
 
   // HARD RULE: only tyres are inspected. Every photo must pass the tyre gate before any result exists.
   try {
@@ -191,6 +161,7 @@ export async function POST(req: Request) {
     const failed = gateFailures(verdict, imageParts.length);
     console.info("[inspect-tyre] tyre gate", { model, images: imageParts.length, failed: failed.length, ms: Date.now() - t0 });
     if (failed.length) {
+      inspectionAbort.abort();
       const notTyre = failed.map((f) => ({ view: views[f.index - 1] || `Photo ${f.index}`, subject: f.subject, confidence: f.confidence }));
       const which = imageParts.length === 1
         ? `No tyre found. The photo shows ${notTyre[0].subject}.`
@@ -198,38 +169,13 @@ export async function POST(req: Request) {
       return notATyre(brief(which, 160), notTyre);
     }
   } catch (e) {
-    const status = e instanceof OpenAI.APIError ? e.status : undefined;
-    const timedOut = e instanceof OpenAI.APIConnectionTimeoutError;
-    console.error("[inspect-tyre] tyre gate failure", { model, ms: Date.now() - t0, status, timedOut });
-    if (timedOut) return fail(504, "The AI took too long to respond. Please try again.");
-    if (status === 429) return fail(503, "The AI service is busy. Please try again shortly.");
-    return fail(502, "The AI inspection service is unavailable. Please try again.");
+    inspectionAbort.abort();
+    return upstreamFailure(e, "tyre gate failure", model, t0);
   }
   debugLog([`Vision model: ${model}`, `Criteria: ${criteria.map((c) => c.code).join(", ")}`, "Vision inference: STARTED"]);
 
   try {
-    const response = await client.responses.create({
-      model,
-      instructions: TYRE_INSPECTION_PROMPT,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text:
-                `${intro}\n\nRETREAD_REJECTION_CRITERIA (the only authority for RETREAD_REJECT; use these exact codes):\n${JSON.stringify(criteria, null, 2)}` +
-                (ctx ? `\n\nOperator-supplied context (unverified; not visual evidence):\n${ctx}` : ""),
-            },
-            ...imageParts,
-          ],
-        },
-      ],
-      text: {
-        format: { type: "json_schema", name: "tyre_retread_prescreen", strict: true, schema: TYRE_INSPECTION_SCHEMA as unknown as Record<string, unknown> },
-      },
-      store: false,
-    });
+    const response = await inspectionCall;
 
     let parsed: unknown;
     try {
@@ -248,14 +194,15 @@ export async function POST(req: Request) {
       });
     }
 
-    const inspection = normalize(checked.value);
+    const inspection = normalizeOutput(checked.value);
     debugLog([
       "Vision inference: COMPLETED", `Decision: ${inspection.decision}`,
       `Rejection reasons: ${inspection.retread_rejection_reasons.length}  Observations: ${inspection.observations_not_automatic_rejection.length}`,
     ]);
     console.info("[inspect-tyre] ok", {
       model, images: imageParts.length, ms: Date.now() - t0, decision: inspection.decision,
-      modelDecision: checked.value.decision, reasons: inspection.retread_rejection_reasons.length,
+      modelDecision: checked.value.decision, modelReasons: checked.value.retread_rejection_reasons.length,
+      reasons: inspection.retread_rejection_reasons.length,
       observations: inspection.observations_not_automatic_rejection.length, tyre: inspection.tyre_detected,
     });
 
@@ -267,11 +214,6 @@ export async function POST(req: Request) {
       disclaimer: INTERNAL_DEFECT_NOTICE,
     });
   } catch (e) {
-    const status = e instanceof OpenAI.APIError ? e.status : undefined;
-    const timedOut = e instanceof OpenAI.APIConnectionTimeoutError;
-    console.error("[inspect-tyre] upstream failure", { model, ms: Date.now() - t0, status, timedOut });
-    if (timedOut) return fail(504, "The AI took too long to respond. Please try again.");
-    if (status === 429) return fail(503, "The AI service is busy. Please try again shortly.");
-    return fail(502, "The AI inspection service is unavailable. Please try again.");
+    return upstreamFailure(e, "upstream failure", model, t0);
   }
 }

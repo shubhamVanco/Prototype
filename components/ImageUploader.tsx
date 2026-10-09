@@ -56,6 +56,8 @@ export function ImageUploader({
       await new Promise((r) => setTimeout(r, 450));
       const latest = { ...imagesRef.current, [angle]: url };
       onChange(latest);
+      // Keep the ref current before the parent re-renders, so a multi-file add sees this photo.
+      imagesRef.current = latest;
       setCameraOpen(false);
       pickNext(angle, latest);
     } catch (e) {
@@ -74,8 +76,17 @@ export function ImageUploader({
     }
   };
 
-  const handleFile = (file?: File | null) => {
-    if (file) void addPhoto(active, fileToDataUrl(file));
+  /** First file fills the selected slot; any further files fill the empty slots in order. */
+  const handleFiles = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
+    const slots = [active, ...ANGLES.map((a) => a.key).filter((k) => k !== active && !imagesRef.current[k])];
+    if (files.length > slots.length) {
+      notify(`Only ${slots.length} photo${slots.length === 1 ? "" : "s"} fit. ${files.length - slots.length} skipped`, "warn");
+    }
+    for (const [i, file] of files.slice(0, slots.length).entries()) {
+      await addPhoto(slots[i], fileToDataUrl(file));
+    }
   };
 
   const openCamera = () => {
@@ -171,8 +182,8 @@ export function ImageUploader({
         </div>
       </div>
 
-      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
-      <input ref={nativeCamRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+      <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void handleFiles(e.target.files)} />
+      <input ref={nativeCamRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFiles(e.target.files)} />
 
       {cameraOpen && (
         <CameraCapture
