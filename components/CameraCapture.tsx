@@ -9,9 +9,11 @@ type CamState = "starting" | "live" | "denied" | "unavailable";
 
 /** Full-screen camera. Falls back to a file picker if the camera can't be used. */
 export function CameraCapture({
-  title, onCapture, onClose, onPickFile,
+  title, hint, onCapture, onClose, onPickFile,
 }: {
   title: string;
+  /** Shown over the viewfinder, e.g. the AI's retake instruction */
+  hint?: string;
   onCapture: (dataUrl: string) => void;
   onClose: () => void;
   onPickFile: () => void;
@@ -105,7 +107,7 @@ export function CameraCapture({
         {!shot && !failed && (
           <>
             <div className="text-ink"><ViewfinderCorners inset="inset-6" /></div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-9 text-center text-sm text-white/85">Align the tyre inside the frame</div>
+            <div className="pointer-events-none absolute inset-x-4 bottom-9 text-center text-sm text-white/85">{hint ?? "Align the tyre inside the frame"}</div>
           </>
         )}
 

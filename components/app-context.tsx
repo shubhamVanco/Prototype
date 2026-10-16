@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   DEFAULT_SETTINGS, loadHistory, loadSettings, saveHistory, saveSettings, type Settings,
 } from "@/lib/storage";
-import type { InspectionRecord, TyreImages, TyreInfo } from "@/types";
+import type { InspectionRecord, TyreImages, TyreInfo, TyreVideos } from "@/types";
 
 export type Screen =
   | "welcome" | "dashboard" | "new" | "capture" | "scanning"
@@ -23,9 +23,10 @@ interface Ctx {
   updateSettings: (p: Partial<Settings>) => void;
   history: InspectionRecord[];
   nextTyreId: () => string;
-  draft: { tyre: TyreInfo; images: TyreImages };
+  draft: Draft;
   setTyre: (t: TyreInfo) => void;
   setImages: (i: TyreImages) => void;
+  setVideos: (v: TyreVideos) => void;
   startNew: () => void;
   current: InspectionRecord | null;
   setCurrent: (r: InspectionRecord | null) => void;
@@ -47,14 +48,16 @@ const emptyTyre = (id: string): TyreInfo => ({
   tyreId: id, brand: "", size: "", type: "Truck", dot: "", previousRetread: false,
 });
 
+export interface Draft { tyre: TyreInfo; images: TyreImages; videos: TyreVideos }
+
+const emptyDraft = (id: string): Draft => ({ tyre: emptyTyre(id), images: {}, videos: {} });
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [stack, setStack] = useState<Screen[]>(["dashboard"]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<InspectionRecord[]>([]);
-  const [draft, setDraft] = useState<{ tyre: TyreInfo; images: TyreImages }>({
-    tyre: emptyTyre("TV-1025"), images: {},
-  });
+  const [draft, setDraft] = useState<Draft>(() => emptyDraft("TV-1025"));
   const [current, setCurrent] = useState<InspectionRecord | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,7 +68,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSettings(s);
     setHistory(h);
     setStack([s.welcomed ? "dashboard" : "welcome"]);
-    setDraft({ tyre: emptyTyre(nextId(h)), images: {} });
+    setDraft(emptyDraft(nextId(h)));
     setReady(true);
   }, []);
 
@@ -105,7 +108,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const nextTyreId = useCallback(() => nextId(history), [history]);
 
   const startNew = useCallback(() => {
-    setDraft({ tyre: emptyTyre(nextId(history)), images: {} });
+    setDraft(emptyDraft(nextId(history)));
     setCurrent(null);
   }, [history]);
 
@@ -131,6 +134,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ready, screen, go, back, settings, updateSettings, history, nextTyreId, draft,
       setTyre: (tyre) => setDraft((d) => ({ ...d, tyre })),
       setImages: (images) => setDraft((d) => ({ ...d, images })),
+      setVideos: (videos) => setDraft((d) => ({ ...d, videos })),
       startNew, current, setCurrent, isSaved, saveCurrent, toast, notify,
     }),
     [ready, screen, go, back, settings, updateSettings, history, nextTyreId, draft, startNew,

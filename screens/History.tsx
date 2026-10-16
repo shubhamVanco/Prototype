@@ -9,8 +9,7 @@ import { STATUS_LABEL } from "@/lib/decision";
 import type { OverallStatus } from "@/types";
 
 const FILTERS: { key: "ALL" | OverallStatus; label: string }[] = [
-  { key: "ALL", label: "All" }, { key: "ACCEPT", label: STATUS_LABEL.ACCEPT },
-  { key: "REVIEW", label: STATUS_LABEL.REVIEW }, { key: "REJECT", label: STATUS_LABEL.REJECT },
+  { key: "ALL", label: "All" }, { key: "ACCEPT", label: STATUS_LABEL.ACCEPT }, { key: "REJECT", label: STATUS_LABEL.REJECT },
 ];
 
 export function HistoryScreen() {
@@ -43,7 +42,7 @@ export function HistoryScreen() {
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-2">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         {FILTERS.map((f) => (
           <button
             key={f.key}

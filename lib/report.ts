@@ -1,5 +1,5 @@
 import type { InspectionRecord } from "@/types";
-import { DISCLAIMER, NOT_A_TYRE_ROUTING, ROUTING, STATUS_HEADLINE } from "./decision";
+import { DISCLAIMER, NOT_A_TYRE_ROUTING, RETAKE_REASON_LABEL, RETAKE_ROUTING, ROUTING, STATUS_HEADLINE } from "./decision";
 import { fullDate } from "./format";
 
 const COLORS = { ACCEPT: "#15803d", REVIEW: "#b45309", REJECT: "#b91c1c" } as const;
@@ -14,11 +14,15 @@ export function reportHtml(r: InspectionRecord): string {
   const mode = res.mode === "UNAVAILABLE" ? "UNAVAILABLE" : "REAL_AI";
   const c = COLORS[res.overallStatus];
   const unavailable = mode === "UNAVAILABLE";
-  const route = res.notATyre ? NOT_A_TYRE_ROUTING : ROUTING[unavailable ? "REVIEW" : res.overallStatus];
-  const headline = unavailable ? "MANUAL INSPECTION REQUIRED" : res.notATyre ? "NOT A TYRE" : STATUS_HEADLINE[res.overallStatus].toUpperCase();
+  const retake = unavailable ? undefined : res.retake;
+  const route = res.notATyre ? NOT_A_TYRE_ROUTING : retake ? RETAKE_ROUTING : ROUTING[unavailable ? "REVIEW" : res.overallStatus];
+  const headline = unavailable ? "NO RESULT: ANALYZE AGAIN" : res.notATyre ? "NOT A TYRE"
+    : retake ? `REJECT: RETAKE NEEDED (${RETAKE_REASON_LABEL[retake.reason].toUpperCase()})`
+      : STATUS_HEADLINE[res.overallStatus].toUpperCase();
   const reasons = res.rejectionReasons ?? [];
   const q = res.imageQuality;
-  const imgs = Object.values(r.images).filter(Boolean).map((src) => `<img src="${src}"/>`).join("");
+  const frames = Object.values(r.videos ?? {}).flatMap((f) => f ?? []);
+  const imgs = [...Object.values(r.images).filter(Boolean), ...frames].map((src) => `<img src="${src}"/>`).join("");
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${r.id} - AI pre-screening report</title>
 <style>
@@ -38,9 +42,9 @@ img{width:130px;height:100px;object-fit:cover;border-radius:6px;margin:0 8px 8px
 ${unavailable ? `<h2>Analysis</h2><span class="mode">AI INSPECTION UNAVAILABLE</span>` : ""}
 <h2>Overall status</h2><span class="status">${esc(headline)}</span>
 <p class="muted">${esc(res.summary)}</p>
-<h2>Send to retreading plant?</h2><p><b>${route.verdict} - ${esc(route.title)}</b><br><span class="muted">${esc(route.note)}</span></p>
+<h2>Result</h2><p><b>${route.verdict} - ${esc(route.title)}</b><br><span class="muted">${esc(retake?.instruction || route.note)}</span></p>
 <h2>Image quality</h2>${q ? `<p class="muted">Usable: ${q.usable ? "yes" : "no"} · Score: ${Math.round(q.score * 100)}%</p>${q.issues.length ? list(q.issues, "") : ""}` : `<p class="muted">Not assessed</p>`}
-<h2>${res.overallStatus === "REJECT" ? "Rejection reasons" : "Possible rejection conditions (not confirmed)"}</h2>${
+<h2>${res.overallStatus === "REJECT" && !retake ? "Rejection reasons" : "Possible rejection conditions (not confirmed)"}</h2>${
   reasons.length
     ? `<table><tr><th>Criterion</th><th>Conf.</th><th>Location</th><th>Visual evidence</th><th>Why</th></tr>${reasons
         .map((d) => `<tr><td>${esc(d.code)} ${esc(d.name)}</td><td>${d.confidence}%</td><td>${esc(d.location)}</td><td>${esc(d.evidence)}</td><td>${esc(d.why)}</td></tr>`).join("")}</table>`
@@ -54,7 +58,7 @@ ${res.notATyre ? "" : `<h2>Observations (not automatic rejection)</h2>${
 <h2>Recommendation</h2><p>${esc(res.recommendation)}</p>
 ${res.followUp?.length ? `<h2>Required follow-up</h2>${list(res.followUp, "")}` : ""}
 <h2>Limitations</h2>${list(res.limitations ?? [], "None listed.")}
-${imgs ? `<h2>Submitted images</h2>${imgs}` : ""}
+${imgs ? `<h2>Submitted photos and 360° video frames</h2>${imgs}` : ""}
 <div class="note">${esc(DISCLAIMER)}</div>
 </body></html>`;
 }

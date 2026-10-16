@@ -1,19 +1,13 @@
-import { ANGLES } from "@/lib/angles";
-import type { ImageAngle, OverallStatus, TyreInspectionResult } from "@/types";
-import type { InspectTyreResponse, RetreadDecision } from "@/types/tyreInspection";
+import { ANGLES, VIDEOS, frameView } from "@/lib/angles";
+import type { TyreInspectionResult } from "@/types";
+import type { InspectTyreResponse, TyreInspectionResult as ApiResult } from "@/types/tyreInspection";
 import type { InspectionInput } from "./tyreInspection";
 
-const STATUS: Record<RetreadDecision, OverallStatus> = {
-  NO_VISIBLE_RETREAD_REJECTION: "ACCEPT",
-  MANUAL_REVIEW: "REVIEW",
-  RETREAD_REJECT: "REJECT",
-};
-
-const ACTION_TEXT: Record<RetreadDecision, string> = {
-  NO_VISIBLE_RETREAD_REJECTION: "Proceed to the plant's next inspection stage.",
-  MANUAL_REVIEW: "Manual inspection required.",
-  RETREAD_REJECT: "Do not send. Escalate per your inspection procedure.",
-};
+const ACTION_TEXT = {
+  PASS: "Proceed to the plant's next inspection stage.",
+  DEFECT: "Do not send. Escalate per your inspection procedure.",
+  RETAKE: "Retake the flagged view, then analyze again.",
+} as const;
 
 function dataUrlToBlob(dataUrl: string): Blob | null {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
@@ -44,7 +38,7 @@ function postForm(
   });
 }
 
-/** Hard rule: photos without a tyre are REJECTED with a short reason, never sent to manual review. */
+/** Hard rule: photos without a tyre are REJECTED with a short reason. */
 function notATyreResult(error: string, views: { view: string; subject: string; confidence: number }[]): TyreInspectionResult {
   const confidence = views.length ? views.reduce((a, v) => a + v.confidence, 0) / views.length : 1;
   return {
@@ -67,44 +61,45 @@ function notATyreResult(error: string, views: { view: string; subject: string; c
   };
 }
 
-/** Vision engine: POSTs the photos to /api/inspect-tyre (OpenAI runs server-side). */
-export async function runAiInspection(input: InspectionInput): Promise<TyreInspectionResult> {
+/** Every view goes up as an "image" part named after its view, which is how the AI refers to it. */
+function buildForm(input: InspectionInput): FormData {
   const form = new FormData();
-  const angles: ImageAngle[] = [];
-  for (const a of ANGLES) {
-    const url = input.images[a.key];
-    const blob = url ? dataUrlToBlob(url) : null;
-    if (blob) {
-      form.append("image", blob, `${a.label}.${blob.type.split("/")[1]}`);
-      angles.push(a.key);
-    }
-  }
-  if (!angles.length) throw new Error("no-supported-image");
+  let views = 0;
+  const add = (dataUrl: string | undefined, view: string) => {
+    const blob = dataUrl ? dataUrlToBlob(dataUrl) : null;
+    if (!blob) return;
+    form.append("image", blob, `${view}.${blob.type.split("/")[1]}`);
+    views++;
+  };
+  for (const a of ANGLES) add(input.images[a.key], a.label);
+  for (const v of VIDEOS) (input.videos?.[v.key] ?? []).forEach((f, i) => add(f, frameView(v.label, i + 1)));
+  if (!views) throw new Error("no-supported-image");
   form.append("tyreId", input.tyre.tyreId);
   form.append("brand", input.tyre.brand);
   form.append("inspectionContext", `Tyre type declared by operator: ${input.tyre.type}`);
+  return form;
+}
 
-  const { ok, json } = await postForm("/api/inspect-tyre", form, input.onUploadProgress);
-  if (json && !json.success && json.code === "NOT_A_TYRE") return notATyreResult(json.error, json.notTyre ?? []);
-  if (!ok || !json || !json.success) {
-    throw new Error(json && !json.success ? json.error : "http-error");
-  }
-
-  const o = json.inspection;
+function toResult(o: ApiResult, model: string): TyreInspectionResult {
   const reasons = o.retread_rejection_reasons;
+  const t = o.retake;
+  const retake = o.reject_type === "RETAKE" && t.reason !== "NONE"
+    ? { reason: t.reason, views: t.views, instruction: t.instruction }
+    : undefined;
   // Confidence = confidence in the verdict's visual evidence (not a safety probability).
-  // NO: the strongest rejection reason. YES: photo quality backs "nothing visible".
-  // HOLD has no verdict to be confident in, so it reports none (the UI shows photo quality instead).
+  // DEFECT: the strongest rejection reason. PASS / RETAKE: photo quality.
   const top = reasons.reduce((m, r) => Math.max(m, r.confidence), 0);
-  const confidence = o.decision === "RETREAD_REJECT" ? top
-    : o.decision === "NO_VISIBLE_RETREAD_REJECTION" ? o.image_quality.score
-      : 0;
-
-  const base = {
-    engine: `OpenAI Vision (${json.model})`,
+  const confidence = o.reject_type === "DEFECT" ? top : o.image_quality.score;
+  return {
+    engine: `OpenAI Vision (${model})`,
+    overallStatus: o.decision === "PASS" ? "ACCEPT" : "REJECT",
+    confidence: Math.round(confidence * 100),
+    mode: "REAL_AI",
+    summary: o.decision_reason,
+    recommendation: o.decision === "PASS" ? ACTION_TEXT.PASS : retake ? ACTION_TEXT.RETAKE : ACTION_TEXT.DEFECT,
+    retake,
     imageQuality: o.image_quality,
     areasNotAssessable: o.areas_not_assessed,
-    followUp: o.required_follow_up,
     limitations: [...new Set([...o.image_quality.issues, ...o.limitations])],
     rejectionReasons: reasons.map((r) => ({
       code: r.criterion_code, name: r.criterion_name, location: r.location,
@@ -114,19 +109,21 @@ export async function runAiInspection(input: InspectionInput): Promise<TyreInspe
       name: x.name, location: x.location, evidence: x.visual_evidence, reason: x.reason_not_rejection,
     })),
   };
+}
 
+/** Vision engine: POSTs the photos and 360° video frames to /api/inspect-tyre (OpenAI runs server-side). */
+export async function runAiInspection(input: InspectionInput): Promise<TyreInspectionResult> {
+  const { ok, json } = await postForm("/api/inspect-tyre", buildForm(input), input.onUploadProgress);
+  if (json && !json.success && json.code === "NOT_A_TYRE") return notATyreResult(json.error, json.notTyre ?? []);
+  if (!ok || !json || !json.success) {
+    throw new Error(json && !json.success ? json.error : "http-error");
+  }
   if (!json.validated) {
+    // No verdict could be trusted: this is "no result yet", never a PASS or REJECT.
     return {
-      ...base, overallStatus: "REVIEW", confidence: 0, mode: "UNAVAILABLE",
-      summary: "AI output could not be validated.", recommendation: "Manual inspection required.",
+      ...toResult(json.inspection, json.model), overallStatus: "REVIEW", confidence: 0, mode: "UNAVAILABLE", retake: undefined,
+      summary: "AI output could not be validated.", recommendation: "Analyze again.",
     };
   }
-  return {
-    ...base,
-    overallStatus: STATUS[o.decision],
-    confidence: Math.round(confidence * 100),
-    mode: "REAL_AI",
-    summary: o.decision_reason,
-    recommendation: ACTION_TEXT[o.decision],
-  };
+  return toResult(json.inspection, json.model);
 }

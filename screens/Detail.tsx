@@ -8,7 +8,7 @@ import { Findings } from "@/components/Findings";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { StickyActions } from "@/components/StickyActions";
 import { Button } from "@/components/ui/button";
-import { ANGLES } from "@/lib/angles";
+import { ANGLES, VIDEOS, frameView } from "@/lib/angles";
 import { DISCLAIMER } from "@/lib/decision";
 import { fullDate } from "@/lib/format";
 import { printReport } from "@/lib/report";
@@ -25,6 +25,7 @@ export function DetailScreen() {
   }
   const { result, tyre } = current;
   const photos = ANGLES.filter((a) => current.images[a.key]);
+  const frames = VIDEOS.flatMap((v) => (current.videos?.[v.key] ?? []).map((src, i) => ({ view: frameView(v.label, i + 1), src })));
   const saved = isSaved(current.id);
 
   return (
@@ -43,6 +44,21 @@ export function DetailScreen() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={current.images[a.key]} alt={a.label} className="aspect-square w-full rounded-lg border border-line object-cover" />
                   <figcaption className="mt-1 truncate text-xs text-muted">{a.label}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {frames.length > 0 && (
+          <section>
+            <h3 className="text-base font-semibold">360° video frames</h3>
+            <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5">
+              {frames.map((f) => (
+                <figure key={f.view} className="w-20 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.src} alt={f.view} className="aspect-square w-full rounded-lg border border-line object-cover" />
+                  <figcaption className="mt-1 truncate text-xs text-muted">{f.view}</figcaption>
                 </figure>
               ))}
             </div>

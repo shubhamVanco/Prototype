@@ -2,28 +2,44 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ImagePlus, RefreshCw } from "lucide-react";
+import { Camera, ImagePlus, RefreshCw } from "lucide-react";
+import { ANGLES, retakeTarget, type CaptureTarget } from "@/lib/angles";
+import { RETAKE_REASON_LABEL } from "@/lib/decision";
 import type { TyreInspectionResult } from "@/types";
-import { useApp } from "./app-context";
+import { useApp, type Draft } from "./app-context";
 import { ImageUploader } from "./ImageUploader";
+import { VideoUploader } from "./VideoUploader";
 import { Button } from "./ui/button";
 
-/** True when the AI asked for a clearer or additional photo, or found no tyre (so the user can replace and re-run). */
+/** True when the AI asked for a retake (lighting, closer look...) or found no tyre. */
 export function needsMorePhotos(r: TyreInspectionResult): boolean {
   if (r.mode !== "REAL_AI") return false;
-  if (r.notATyre) return true;
-  return r.overallStatus !== "REJECT" && (r.imageQuality?.usable === false || (r.followUp?.length ?? 0) > 0);
+  return !!r.notATyre || !!r.retake;
+}
+
+/** Where to point the camera when the AI did not name a view we recognise. */
+function fallbackTarget(draft: Draft): CaptureTarget {
+  const photo = ANGLES.find((a) => draft.images[a.key]);
+  if (photo) return { kind: "photo", key: photo.key };
+  if (draft.videos.video1 || !Object.keys(draft.videos).length) return { kind: "video", key: "video1" };
+  return { kind: "video", key: "video2" };
 }
 
 /**
- * Add / replace photos and re-run. Starts collapsed (one row) so it doesn't push the findings a screen down;
- * open straight away when no tyre was found, because adding a tyre photo is the only way forward.
+ * Retake panel. When the AI rejected because of lighting / a closer look needed / blur..., the camera
+ * opens AUTOMATICALLY on the flagged view with the AI's instruction over the viewfinder. After the
+ * retake the inspector taps "Analyze again". For "not a tyre" the uploader opens without the camera.
  */
 export function MorePhotos({ result }: { result: TyreInspectionResult }) {
-  const { draft, setImages, go } = useApp();
-  const [open, setOpen] = useState(!!result.notATyre);
-  const hints = result.notATyre ? [] : (result.imageQuality?.issues ?? []);
-  const count = Object.values(draft.images).filter(Boolean).length;
+  const { draft, setImages, setVideos, go } = useApp();
+  const retake = result.retake;
+  // Decided once per result, so re-renders never re-open a camera the inspector closed.
+  const [target] = useState<CaptureTarget>(() => (retake && retakeTarget(retake.views)) || fallbackTarget(draft));
+  const [open, setOpen] = useState(!!result.notATyre || !!retake);
+  const count = Object.values(draft.images).filter(Boolean).length
+    + Object.values(draft.videos).filter((f) => f?.length).length;
+
+  const title = result.notATyre ? "Upload a tyre photo" : `Retake needed${retake ? `: ${RETAKE_REASON_LABEL[retake.reason]}` : ""}`;
 
   return (
     <motion.section
@@ -32,20 +48,31 @@ export function MorePhotos({ result }: { result: TyreInspectionResult }) {
       className="rounded-2xl border border-warn/40 p-4"
     >
       <div className="flex items-center gap-2">
-        <ImagePlus size={18} className="shrink-0 text-warn" />
-        <h3 className="text-base font-semibold">{result.notATyre ? "Upload a tyre photo" : "A clearer photo would help"}</h3>
+        {retake ? <Camera size={18} className="shrink-0 text-warn" /> : <ImagePlus size={18} className="shrink-0 text-warn" />}
+        <h3 className="text-base font-semibold">{title}</h3>
       </div>
-      {hints.length > 0 && (
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-muted">
-          {hints.map((h) => <li key={h}><span className="line-clamp-3">{h}</span></li>)}
-        </ul>
-      )}
+      {retake?.instruction && <p className="mt-1.5 line-clamp-3 text-sm text-muted">{retake.instruction}</p>}
 
       {open ? (
         <>
-          {!result.notATyre && <p className="mt-1 text-sm text-muted">Add or replace photos, then analyze again.</p>}
           <div className="mt-3">
-            <ImageUploader images={draft.images} onChange={setImages} compact />
+            {target.kind === "video" && !result.notATyre ? (
+              <VideoUploader
+                videos={draft.videos}
+                onChange={setVideos}
+                only={target.key}
+                autoOpen={retake ? target.key : undefined}
+                hint={retake?.instruction}
+              />
+            ) : (
+              <ImageUploader
+                images={draft.images}
+                onChange={setImages}
+                compact
+                autoOpen={retake && target.kind === "photo" ? target.key : undefined}
+                cameraHint={retake?.instruction}
+              />
+            )}
           </div>
           <Button className="mt-3" disabled={!count} onClick={() => go("scanning", { replace: true })}>
             <RefreshCw size={16} /> Analyze again

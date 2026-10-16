@@ -6,16 +6,21 @@ import { brief } from "@/lib/ai/brief";
 import { normalizeOutput } from "@/lib/ai/normalizeOutput";
 import { INTERNAL_DEFECT_NOTICE, TYRE_INSPECTION_PROMPT } from "@/lib/ai/tyreInspectionPrompt";
 import { TYRE_INSPECTION_SCHEMA } from "@/lib/ai/tyreInspectionSchema";
-import { NOT_A_TYRE_CODE, TYRE_GATE_PROMPT, TYRE_GATE_SCHEMA, gateFailures } from "@/lib/ai/tyreGate";
+import { NOT_A_TYRE_CODE, TYRE_GATE_PROMPT, TYRE_GATE_SCHEMA, VIDEO_FRAME_VIEW, gateFailures, groupGateFailures } from "@/lib/ai/tyreGate";
 import { validateModelOutput } from "@/lib/ai/validateOutput";
 import type { InspectTyreResponse, TyreInspectionResult } from "@/types/tyreInspection";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_BYTES = 8 * 1024 * 1024;
-const MAX_IMAGES = 5;
-const TIMEOUT_MS = 45_000;
+const MAX_PHOTOS = 5;
+// Must match FRAMES_PER_VIDEO x video slots on the client (lib/video.ts, lib/angles.ts).
+const MAX_VIDEO_FRAMES = 2 * 8;
+const MAX_IMAGES = MAX_PHOTOS + MAX_VIDEO_FRAMES;
+// Up to 21 high-detail views take longer than a handful of photos. No retries: one attempt must
+// finish inside maxDuration (120 s) or the platform cuts the response off mid-flight.
+const TIMEOUT_MS = 100_000;
 
 const fail = (status: number, error: string) =>
   NextResponse.json<InspectTyreResponse>({ success: false, error }, { status });
@@ -33,16 +38,23 @@ function sniff(b: Uint8Array): "image/jpeg" | "image/png" | "image/webp" | null 
   return null;
 }
 
+/** The view name ("Tread", "Video 1 frame 3"...) travels as the upload's file name. */
+function viewName(f: File): string {
+  return (f.name || "photo").replace(/\.[a-z0-9]+$/i, "").replace(/[^\w -]/g, "").slice(0, 30);
+}
+
 function unvalidated(): TyreInspectionResult {
   return {
-    decision: "MANUAL_REVIEW",
+    // Never shown as a verdict: the client treats validated=false as "no result, analyze again".
+    decision: "REJECT",
+    reject_type: "RETAKE",
     tyre_detected: true,
     image_quality: { usable: false, score: 0, issues: ["AI output could not be validated."] },
     retread_rejection_reasons: [],
     observations_not_automatic_rejection: [],
+    retake: { reason: "NONE", views: [], instruction: "" },
     areas_not_assessed: ["Internal casing condition"],
-    decision_reason: "AI output could not be validated. Manual inspection required.",
-    required_follow_up: ["Manual physical inspection"],
+    decision_reason: "AI output could not be validated. Please analyze again.",
     limitations: [INTERNAL_DEFECT_NOTICE],
   };
 }
@@ -71,6 +83,9 @@ export async function POST(req: Request) {
   const files = form.getAll("image").filter((v): v is File => typeof v !== "string");
   if (!files.length) return fail(400, "No image was provided.");
   if (files.length > MAX_IMAGES) return fail(400, `Please send at most ${MAX_IMAGES} images.`);
+  const frameCount = files.filter((f) => VIDEO_FRAME_VIEW.test(viewName(f))).length;
+  if (files.length - frameCount > MAX_PHOTOS) return fail(400, `Please send at most ${MAX_PHOTOS} photos.`);
+  if (frameCount > MAX_VIDEO_FRAMES) return fail(400, `Please send at most ${MAX_VIDEO_FRAMES} video frames.`);
 
   const imageParts: { type: "input_image"; image_url: string; detail: "high" }[] = [];
   const views: string[] = [];
@@ -91,7 +106,7 @@ export async function POST(req: Request) {
       image_url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
       detail: "high",
     });
-    views.push((f.name || "photo").replace(/\.[a-z0-9]+$/i, "").replace(/[^\w -]/g, "").slice(0, 30));
+    views.push(viewName(f));
   }
 
   const ctx = ["tyreId", "brand", "size", "inspectionContext"]
@@ -104,10 +119,12 @@ export async function POST(req: Request) {
   const intro =
     imageParts.length > 1
       ? `${imageParts.length} images are supplied as views of the same tyre. Views, in order: ${views.map((v, i) => `${i + 1}) ${v}`).join(", ")}. ` +
-        "Inspect EACH image on its own: a rejection condition clearly visible in any single image is enough for RETREAD_REJECT, even if the other images look normal."
-      : "One image is supplied.";
+        (frameCount ? "\"Video N frame K\" views are frames of a 360° scan video, in order round the tyre. " : "") +
+        "Inspect EACH view on its own: a rejection condition clearly visible in any single view is enough for REJECT (DEFECT), even if the other views look normal. " +
+        "For a RETAKE, list the exact view names above in retake.views."
+      : `One image is supplied. View name: ${views[0]}.`;
   const model = process.env.OPENAI_VISION_MODEL || "gpt-4.1";
-  const client = new OpenAI({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
+  const client = new OpenAI({ apiKey, timeout: TIMEOUT_MS, maxRetries: 0 });
   const t0 = Date.now();
 
   // The tyre gate and the inspection run in parallel to halve the wait. The gate still decides first:
@@ -158,11 +175,10 @@ export async function POST(req: Request) {
     });
     let verdict: unknown = null;
     try { verdict = JSON.parse(gate.output_text); } catch { /* malformed => every photo fails below */ }
-    const failed = gateFailures(verdict, imageParts.length);
-    console.info("[inspect-tyre] tyre gate", { model, images: imageParts.length, failed: failed.length, ms: Date.now() - t0 });
-    if (failed.length) {
+    const notTyre = groupGateFailures(gateFailures(verdict, imageParts.length), views);
+    console.info("[inspect-tyre] tyre gate", { model, images: imageParts.length, failed: notTyre.length, ms: Date.now() - t0 });
+    if (notTyre.length) {
       inspectionAbort.abort();
-      const notTyre = failed.map((f) => ({ view: views[f.index - 1] || `Photo ${f.index}`, subject: f.subject, confidence: f.confidence }));
       const which = imageParts.length === 1
         ? `No tyre found. The photo shows ${notTyre[0].subject}.`
         : `No tyre found in ${notTyre.map((n) => `${n.view} (${n.subject})`).join(", ")}.`;

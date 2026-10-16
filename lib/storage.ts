@@ -50,7 +50,7 @@ export function loadHistory(): InspectionRecord[] {
 /** Persist history. If storage quota is hit, drop images from older records and retry. */
 export function saveHistory(records: InspectionRecord[]): boolean {
   if (write(K_HISTORY, records)) return true;
-  const slim = records.map((r, i) => (i > 0 ? { ...r, images: {} } : r));
+  const slim = records.map((r, i) => (i > 0 ? { ...r, images: {}, videos: {} } : r));
   return write(K_HISTORY, slim);
 }
 

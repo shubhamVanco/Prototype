@@ -1,6 +1,15 @@
 /** Backend contract for POST /api/inspect-tyre (OpenAI structured output). */
 
-export type RetreadDecision = "RETREAD_REJECT" | "MANUAL_REVIEW" | "NO_VISIBLE_RETREAD_REJECTION";
+/** Client rule: the only outcomes are PASS or REJECT (no third "hold" outcome). */
+export type RetreadDecision = "PASS" | "REJECT";
+
+/**
+ * Why a REJECT happened. RETAKE = the photo/video was not good enough to judge
+ * (lighting, distance, blur...): the app re-opens the camera for the flagged views.
+ */
+export type RejectType = "NONE" | "DEFECT" | "RETAKE";
+
+export type RetakeReason = "NONE" | "LIGHTING" | "CLOSER_LOOK" | "BLUR" | "ANGLE" | "OBSTRUCTED";
 
 export interface ImageQuality {
   usable: boolean;
@@ -29,17 +38,24 @@ export interface Observation {
   reason_not_rejection: string;
 }
 
-export type Recommendation = RetreadDecision;
+export interface RetakeRequest {
+  reason: RetakeReason;
+  /** Exact view names as supplied to the model, e.g. "Tread" or "Video 1 frame 3" */
+  views: string[];
+  /** One short instruction for the inspector, e.g. "Move closer to the shoulder." */
+  instruction: string;
+}
 
 export interface TyreInspectionResult {
   decision: RetreadDecision;
+  reject_type: RejectType;
   tyre_detected: boolean;
   image_quality: ImageQuality;
   retread_rejection_reasons: RejectionReason[];
   observations_not_automatic_rejection: Observation[];
+  retake: RetakeRequest;
   areas_not_assessed: string[];
   decision_reason: string;
-  required_follow_up: string[];
   limitations: string[];
 }
 

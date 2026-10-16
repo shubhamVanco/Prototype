@@ -15,12 +15,19 @@ import { useApp } from "./app-context";
  * `compact` drops the large preview box (used inside the result page to save a screen of scrolling).
  */
 export function ImageUploader({
-  images, onChange, compact = false,
-}: { images: TyreImages; onChange: (i: TyreImages) => void; compact?: boolean }) {
+  images, onChange, compact = false, autoOpen, cameraHint,
+}: {
+  images: TyreImages;
+  onChange: (i: TyreImages) => void;
+  compact?: boolean;
+  /** Open the camera on this angle straight away (used when the AI asks for a retake) */
+  autoOpen?: ImageAngle;
+  cameraHint?: string;
+}) {
   const { notify } = useApp();
   const galleryRef = useRef<HTMLInputElement>(null);
   const nativeCamRef = useRef<HTMLInputElement>(null);
-  const [active, setActive] = useState<ImageAngle>(() => ANGLES.find((a) => !images[a.key])?.key ?? "full");
+  const [active, setActive] = useState<ImageAngle>(() => autoOpen ?? ANGLES.find((a) => !images[a.key])?.key ?? "full");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [up, setUp] = useState<{ angle: ImageAngle; progress: number; preview?: string; done?: boolean } | null>(null);
@@ -93,6 +100,13 @@ export function ImageUploader({
     if (typeof navigator.mediaDevices?.getUserMedia === "function") setCameraOpen(true);
     else nativeCamRef.current?.click(); // no getUserMedia (e.g. http on phone): use native camera picker
   };
+
+  // Retake: jump to the flagged angle and open the camera without a tap.
+  useEffect(() => {
+    if (!autoOpen) return;
+    setActive(autoOpen);
+    if (typeof navigator.mediaDevices?.getUserMedia === "function") setCameraOpen(true);
+  }, [autoOpen]);
 
   const activeInfo = ANGLES.find((a) => a.key === active)!;
 
@@ -188,6 +202,7 @@ export function ImageUploader({
       {cameraOpen && (
         <CameraCapture
           title={activeInfo.label}
+          hint={active === autoOpen ? cameraHint : undefined}
           onClose={() => setCameraOpen(false)}
           onPickFile={() => galleryRef.current?.click()}
           onCapture={(url) => { setCameraOpen(false); void addPhoto(active, Promise.resolve(url)); }}

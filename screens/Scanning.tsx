@@ -5,7 +5,7 @@ import { Check, Circle, Loader2 } from "lucide-react";
 import { useApp } from "@/components/app-context";
 import { ScanAnimation } from "@/components/ScanAnimation";
 import { cn } from "@/lib/cn";
-import { ANGLES } from "@/lib/angles";
+import { ANGLES, VIDEOS } from "@/lib/angles";
 import { runTyreInspection } from "@/services/tyreInspection";
 import type { TyreInspectionResult } from "@/types";
 
@@ -15,11 +15,12 @@ const STAGES = ["Uploading photos", "Checking for a tyre and rejection criteria"
 // Share of the bar each step gets; the AI step eases toward its end so the bar never stalls or jumps.
 const UPLOAD_SHARE = 15;
 const AI_END = 92;
-const AI_EASE_MS = 12_000;
+// Video frames add views, so the AI step takes longer than with photos alone.
+const AI_EASE_MS = 20_000;
 const TICK_MS = 200;
 
 export function ScanningScreen() {
-  const { draft, go, back, setCurrent, notify, setImages } = useApp();
+  const { draft, go, back, setCurrent, notify, setImages, setVideos } = useApp();
   const [phase, setPhase] = useState(0); // index of the active stage
   const [upload, setUpload] = useState(0);
   const [aiStartedAt, setAiStartedAt] = useState<number | null>(null);
@@ -37,22 +38,27 @@ export function ScanningScreen() {
     const finish = (r: TyreInspectionResult) => {
       if (cancelled) return;
       setCurrent({
-        id: draft.tyre.tyreId || "TV-NEW", tyre: draft.tyre, images: draft.images, result: r, createdAt: Date.now(),
+        id: draft.tyre.tyreId || "TV-NEW", tyre: draft.tyre, images: draft.images, videos: draft.videos,
+        result: r, createdAt: Date.now(),
       });
       if (r.notATyre) {
-        // Drop the photos without a tyre from the draft so a re-run uses only tyre photos.
+        // Drop the photos / videos without a tyre from the draft so a re-run uses only tyre views.
         const bad = new Set((r.rejectionReasons ?? []).map((x) => x.location));
         const kept = { ...draft.images };
         for (const a of ANGLES) if (bad.has(a.label)) delete kept[a.key];
         setImages(kept);
+        const keptVideos = { ...draft.videos };
+        for (const v of VIDEOS) if (bad.has(v.label)) delete keptVideos[v.key];
+        setVideos(keptVideos);
         notify("Rejected: no tyre in the photo", "bad");
       }
+      if (r.retake) notify("Retake needed. Opening the camera", "warn");
       if (r.mode === "UNAVAILABLE") notify("AI inspection unavailable", "bad");
       go("result", { replace: true });
     };
 
     runTyreInspection({
-      tyre: draft.tyre, images: draft.images,
+      tyre: draft.tyre, images: draft.images, videos: draft.videos,
       onUploadProgress: (f) => {
         if (cancelled) return;
         setUpload(f);
@@ -95,7 +101,7 @@ export function ScanningScreen() {
         <p className="text-sm text-muted">{draft.tyre.tyreId} · {draft.tyre.brand} · {draft.tyre.type}</p>
       </div>
 
-      <ScanAnimation src={draft.images.full ?? Object.values(draft.images).find(Boolean)} />
+      <ScanAnimation src={draft.images.full ?? Object.values(draft.images).find(Boolean) ?? draft.videos.video1?.[0] ?? draft.videos.video2?.[0]} />
 
       <div
         role="progressbar" aria-label="Analysis progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}

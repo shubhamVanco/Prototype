@@ -1,4 +1,4 @@
-import { DECISIONS } from "./tyreInspectionSchema";
+import { DECISIONS, REJECT_TYPES, RETAKE_REASONS } from "./tyreInspectionSchema";
 import type { RetreadCriterion } from "./retreadCriteria";
 import type { TyreInspectionResult } from "@/types/tyreInspection";
 
@@ -15,8 +15,8 @@ const TYRE_SIZE = /\b\d{2,3}\/\d{2}\s?Z?R\s?\d{2}(?:\.5)?\b|\b\d{1,2}(?:\.\d{2})
 const DOT_CODE = /\bDOT\s?[A-Z0-9]{2,}/i;
 
 /**
- * Strict validation of the model's JSON. Anything off => the caller returns MANUAL_REVIEW with
- * "AI output could not be validated reliably." (never a substitute result).
+ * Strict validation of the model's JSON. Anything off => the caller returns "AI output could not
+ * be validated" with no verdict (never a substitute PASS or REJECT).
  * Rejection codes must exist in the configured criteria: codes are never invented.
  */
 export function validateModelOutput(x: unknown, operatorContext: string, criteria: RetreadCriterion[]): Check {
@@ -24,11 +24,14 @@ export function validateModelOutput(x: unknown, operatorContext: string, criteri
   const r = x as TyreInspectionResult;
   if (!r || typeof r !== "object") return bad("not an object");
   if (!(DECISIONS as readonly string[]).includes(r.decision)) return bad("unknown decision");
+  if (!(REJECT_TYPES as readonly string[]).includes(r.reject_type)) return bad("unknown reject_type");
   if (typeof r.tyre_detected !== "boolean") return bad("tyre_detected");
   const q = r.image_quality;
   if (!q || typeof q.usable !== "boolean" || !isProb(q.score) || !isStrArr(q.issues)) return bad("image_quality");
+  const t = r.retake;
+  if (!t || !(RETAKE_REASONS as readonly string[]).includes(t.reason) || !isStrArr(t.views) || !isStr(t.instruction)) return bad("retake");
   if (!isStr(r.decision_reason)) return bad("missing decision_reason");
-  if (!isStrArr(r.areas_not_assessed) || !isStrArr(r.limitations) || !isStrArr(r.required_follow_up)) return bad("arrays");
+  if (!isStrArr(r.areas_not_assessed) || !isStrArr(r.limitations)) return bad("arrays");
   if (!Array.isArray(r.retread_rejection_reasons) || !Array.isArray(r.observations_not_automatic_rejection)) return bad("lists");
 
   const byCode = new Map(criteria.map((c) => [c.code, c]));
@@ -47,7 +50,7 @@ export function validateModelOutput(x: unknown, operatorContext: string, criteri
   }
 
   const text = [
-    r.decision_reason, ...r.limitations, ...r.areas_not_assessed, ...r.required_follow_up,
+    r.decision_reason, ...r.limitations, ...r.areas_not_assessed, r.retake.instruction,
     ...r.retread_rejection_reasons.flatMap((d) => [d.visual_evidence, d.location, d.why_it_meets_rejection_criterion]),
     ...r.observations_not_automatic_rejection.flatMap((o) => [o.name, o.visual_evidence, o.location, o.reason_not_rejection]),
   ].join("\n");

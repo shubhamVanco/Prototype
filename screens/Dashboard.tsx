@@ -17,10 +17,10 @@ export function DashboardScreen() {
   const { history, go, startNew, setCurrent } = useApp();
   // Only inspections actually run and saved in this browser.
   const today = history.filter((r) => isToday(r.createdAt));
-  const count = (s: "ACCEPT" | "REVIEW" | "REJECT") => today.filter((r) => r.result.overallStatus === s).length;
+  const count = (s: "ACCEPT" | "REJECT") => today.filter((r) => r.result.overallStatus === s).length;
+  // Client rule: results are only PASS or REJECT.
   const rows = [
     { key: "ACCEPT" as const, label: STATUS_HEADLINE.ACCEPT, n: count("ACCEPT"), bar: "bg-ok" },
-    { key: "REVIEW" as const, label: STATUS_HEADLINE.REVIEW, n: count("REVIEW"), bar: "bg-warn" },
     { key: "REJECT" as const, label: STATUS_HEADLINE.REJECT, n: count("REJECT"), bar: "bg-bad" },
   ];
   const total = today.length;

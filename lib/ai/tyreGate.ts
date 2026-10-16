@@ -14,7 +14,8 @@ vehicle tyre (pneumatic rubber tyre, with or without its wheel/rim) that is clea
 visible and large enough in the frame to be inspected?
 
 Answer is_tyre = true ONLY when ALL of these hold:
-- It is a photograph of a real tyre (truck, bus, car, commercial, two-wheeler, etc.).
+- It is a photograph of a real tyre (truck, bus, car, commercial, two-wheeler, etc.),
+  either a still photo or a frame from a 360° scan video of the tyre.
 - The tyre (or a close-up part of it: tread, sidewall, bead, shoulder) is the main subject.
 - Enough of the tyre surface is visible to inspect it.
 
@@ -54,6 +55,35 @@ export const TYRE_GATE_SCHEMA = {
 } as const;
 
 export interface GateVerdict { index: number; is_tyre: boolean; subject: string; confidence: number }
+
+/** Video frames are uploaded as "Video N frame K"; still photos use their angle label. */
+export const VIDEO_FRAME_VIEW = /^(Video \d+) frame \d+$/;
+
+type Failure = { index: number; subject: string; confidence: number };
+export type NotTyreView = { view: string; subject: string; confidence: number };
+
+/**
+ * Turns per-image gate failures into the views the user sees.
+ * A still photo fails on its own. A 360° video tolerates a few blurred or off-tyre frames (normal
+ * while walking round a tyre) and only fails when at least half of its frames fail.
+ */
+export function groupGateFailures(failed: Failure[], views: string[]): NotTyreView[] {
+  const out: NotTyreView[] = [];
+  const videoFails = new Map<string, Failure[]>();
+  for (const f of failed) {
+    const view = views[f.index - 1] || `Photo ${f.index}`;
+    const video = VIDEO_FRAME_VIEW.exec(view)?.[1];
+    if (!video) out.push({ view, subject: f.subject, confidence: f.confidence });
+    else videoFails.set(video, [...(videoFails.get(video) ?? []), f]);
+  }
+  for (const [video, fails] of videoFails) {
+    const frames = views.filter((v) => VIDEO_FRAME_VIEW.exec(v)?.[1] === video).length;
+    if (fails.length * 2 < frames) continue;
+    const confidence = fails.reduce((a, f) => a + f.confidence, 0) / fails.length;
+    out.push({ view: video, subject: fails[0].subject, confidence });
+  }
+  return out;
+}
 
 /**
  * Returns the 1-based indexes of photos that did NOT pass, with what the model saw.

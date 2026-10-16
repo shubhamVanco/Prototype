@@ -57,7 +57,8 @@ export function Findings({ result }: { result: TyreInspectionResult }) {
 
   return (
     <>
-      {!unavailable && (
+      {/* On a retake nothing was decided: the retake panel explains what to capture again. */}
+      {!unavailable && !result.retake && (
         <Section
           title={isReject ? "Rejection reasons" : "Possible rejection conditions"}
           count={reasons.length}

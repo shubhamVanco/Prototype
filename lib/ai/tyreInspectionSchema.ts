@@ -1,4 +1,6 @@
-export const DECISIONS = ["RETREAD_REJECT", "MANUAL_REVIEW", "NO_VISIBLE_RETREAD_REJECTION"] as const;
+export const DECISIONS = ["PASS", "REJECT"] as const;
+export const REJECT_TYPES = ["NONE", "DEFECT", "RETAKE"] as const;
+export const RETAKE_REASONS = ["NONE", "LIGHTING", "CLOSER_LOOK", "BLUR", "ANGLE", "OBSTRUCTED"] as const;
 
 const strArray = { type: "array", items: { type: "string" } };
 
@@ -7,12 +9,12 @@ export const TYRE_INSPECTION_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
-    "decision", "tyre_detected", "image_quality", "retread_rejection_reasons",
-    "observations_not_automatic_rejection", "areas_not_assessed", "decision_reason",
-    "required_follow_up", "limitations",
+    "decision", "reject_type", "tyre_detected", "image_quality", "retread_rejection_reasons",
+    "observations_not_automatic_rejection", "retake", "areas_not_assessed", "decision_reason", "limitations",
   ],
   properties: {
     decision: { type: "string", enum: [...DECISIONS] },
+    reject_type: { type: "string", enum: [...REJECT_TYPES] },
     tyre_detected: { type: "boolean" },
     image_quality: {
       type: "object",
@@ -55,9 +57,18 @@ export const TYRE_INSPECTION_SCHEMA = {
         },
       },
     },
+    retake: {
+      type: "object",
+      additionalProperties: false,
+      required: ["reason", "views", "instruction"],
+      properties: {
+        reason: { type: "string", enum: [...RETAKE_REASONS] },
+        views: strArray,
+        instruction: { type: "string" },
+      },
+    },
     areas_not_assessed: strArray,
     decision_reason: { type: "string" },
-    required_follow_up: strArray,
     limitations: strArray,
   },
 } as const;

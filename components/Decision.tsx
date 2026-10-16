@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ShieldAlert } from "lucide-react";
-import { NOT_A_TYRE_ROUTING, ROUTING } from "@/lib/decision";
+import { NOT_A_TYRE_ROUTING, RETAKE_REASON_LABEL, RETAKE_ROUTING, ROUTING } from "@/lib/decision";
 import type { TyreInspectionResult } from "@/types";
 import { STATUS_STYLE } from "./InspectionStatus";
 
@@ -14,10 +14,12 @@ import { STATUS_STYLE } from "./InspectionStatus";
 export function Decision({ result }: { result: TyreInspectionResult }) {
   const unavailable = result.mode === "UNAVAILABLE";
   const status = unavailable ? "REVIEW" : result.overallStatus;
-  const r = result.notATyre ? NOT_A_TYRE_ROUTING : ROUTING[status];
+  const retake = !unavailable ? result.retake : undefined;
+  const r = result.notATyre ? NOT_A_TYRE_ROUTING : retake ? RETAKE_ROUTING : ROUTING[status];
   const st = STATUS_STYLE[status];
   // The AI's specific reason beats the generic routing note; show only one of them.
   const reason = result.summary || r.note;
+  const showQuality = status === "REVIEW" || !!retake;
 
   return (
     <section aria-labelledby="decision-title" className={`rounded-2xl border p-4 ${st.border} ${st.bg}`}>
@@ -27,12 +29,12 @@ export function Decision({ result }: { result: TyreInspectionResult }) {
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className={`shrink-0 font-display text-[44px] font-bold leading-none tracking-tight ${st.text}`}
+          className={`shrink-0 font-display text-[34px] font-bold leading-none tracking-tight ${st.text}`}
         >
           {r.verdict}
         </motion.p>
         <h2 id="decision-title" className="text-lg font-semibold leading-tight">
-          <span className="sr-only">Send to retreading plant: {r.verdict}. </span>
+          <span className="sr-only">Result: {r.verdict}. </span>
           {r.title}
         </h2>
       </div>
@@ -43,10 +45,11 @@ export function Decision({ result }: { result: TyreInspectionResult }) {
         {unavailable ? (
           <span className="inline-flex items-center gap-1.5 text-bad"><ShieldAlert size={14} /> AI unavailable</span>
         ) : (
-          status === "REVIEW"
+          showQuality
             ? result.imageQuality && <span className="tabular">Photo quality <b className="font-semibold text-ink">{Math.round(result.imageQuality.score * 100)}%</b></span>
             : <span className="tabular">Confidence <b className="font-semibold text-ink">{result.confidence}%</b></span>
         )}
+        {retake && <span className="font-medium text-warn">{RETAKE_REASON_LABEL[retake.reason]}</span>}
       </div>
     </section>
   );
